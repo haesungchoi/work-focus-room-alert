@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>포커스룸 자리 배정</title>
+  <style>
+    :root {
+      --focus: #7c3aed; --focus-bg: #f5f3ff; --focus-bd: #c4b5fd;
+      --ext: #0284c7;   --ext-bg:   #f0f9ff; --ext-bd:   #bae6fd;
+      --bg: #f8fafc; --card: #fff; --border: #e2e8f0;
+      --text: #1e293b; --muted: #64748b; --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: white; border-bottom: 1px solid var(--border);
+      padding: 13px 18px; position: sticky; top: 0; z-index: 20;
+    }
+    .header h1 { font-size: 16px; font-weight: 700; }
+    .header .hdate { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+    /* ── Nav (5 tabs) ── */
+    .nav {
+      display: flex; background: white; border-bottom: 1px solid var(--border);
+      position: sticky; top: 50px; z-index: 19;
+    }
+    .nav-tab {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      padding: 7px 2px 6px; cursor: pointer; border: none; background: none;
+      border-bottom: 2px solid transparent; font-family: inherit; color: var(--muted);
+      transition: all 0.15s;
+    }
+    .nav-tab .ti { font-size: 15px; line-height: 1; }
+    .nav-tab .tl { font-size: 9px; font-weight: 600; margin-top: 2px; letter-spacing: -0.01em; }
+    .nav-tab.active { color: var(--focus); border-bottom-color: var(--focus); }
+
+    /* ── Layout ── */
+    .content { padding: 0 15px 36px; max-width: 480px; margin: 0 auto; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .sec { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 18px 0 8px; }
+    .gap8 { height: 8px; } .gap16 { height: 16px; } .gap24 { height: 24px; }
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+    /* ── Seat cards ── */
+    .seat-card {
+      background: var(--card); border-radius: 12px; border: 1.5px solid var(--border);
+      padding: 13px 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px;
+    }
+    .seat-card.focus { border-color: var(--focus-bd); background: var(--focus-bg); }
+    .seat-card.external { border-color: var(--ext-bd); background: var(--ext-bg); }
+    .seat-card.absent { opacity: 0.5; }
+    .seat-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+    }
+    .seat-card.focus .seat-icon { background: #ede9fe; }
+    .seat-card.external .seat-icon { background: #e0f2fe; }
+    .seat-card.absent .seat-icon { background: #f3f4f6; }
+    .seat-lbl { font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+    .seat-card.focus .seat-lbl { color: var(--focus); }
+    .seat-card.external .seat-lbl { color: var(--ext); }
+    .person-name { font-size: 15px; font-weight: 700; }
+    .focus-badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      background: #ede9fe; color: var(--focus); padding: 1px 7px; border-radius: 99px; margin-top: 3px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: block; width: 100%; padding: 13px; border-radius: 12px; border: none;
+      font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.15s;
+    }
+    .btn + .btn { margin-top: 8px; }
+    .btn-primary { background: var(--focus); color: white; }
+    .btn-primary:active { background: #6d28d9; }
+    .btn-secondary { background: white; color: var(--text); border: 1.5px solid var(--border); }
+    .btn-danger { background: white; color: var(--danger); border: 1.5px solid #fecaca; }
+
+    /* ── Person rows ── */
+    .person-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; background: white; border-radius: 12px;
+      border: 1.5px solid var(--border); margin-bottom: 7px;
+    }
+    .person-row .pname { font-size: 14px; font-weight: 600; }
+    .person-row .psub { font-size: 11px; color: var(--muted); }
+    .toggle { position: relative; width: 42px; height: 23px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top:0;left:0;right:0;bottom:0; background:#d1d5db; border-radius:23px; transition:.2s; }
+    .slider:before { content:''; position:absolute; width:17px;height:17px;left:3px;bottom:3px; background:white;border-radius:50%;transition:.2s; }
+    .toggle input:checked + .slider { background: var(--danger); }
+    .toggle input:checked + .slider:before { transform: translateX(19px); }
+
+    /* ── Alert ── */
+    .alert { padding: 11px 13px; border-radius: 10px; font-size: 12px; margin-bottom: 4px; line-height: 1.6; }
+    .alert-info { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+    .alert-warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+    .alert-ok   { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+
+    /* ── History ── */
+    .history-card { background:white; border-radius:12px; border:1.5px solid var(--border); padding:14px 15px; margin-bottom:9px; }
+    .history-date { font-size:11px; font-weight:700; color:var(--muted); margin-bottom:8px; }
+    .history-row { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:13px; }
+    .chip { font-size:10px; font-weight:700; padding:2px 7px; border-radius:99px; white-space:nowrap; }
+    .chip.focus { background:#ede9fe; color:var(--focus); }
+    .chip.external { background:#e0f2fe; color:var(--ext); }
+    .chip.absent { background:#f3f4f6; color:var(--muted); }
+
+    /* ── Settings inputs ── */
+    .input-group { margin-bottom: 8px; }
+    .input-lbl { font-size:11px; font-weight:700; color:var(--muted); display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+    .pcolor-dot { width:9px;height:9px;border-radius:50%;display:inline-block; flex-shrink:0; }
+    .input-field {
+      width:100%; padding:11px 13px; border-radius:10px; border:1.5px solid var(--border);
+      font-size:14px; font-family:inherit; outline:none; transition:border-color .2s;
+    }
+    .input-field:focus { border-color: var(--focus); }
+
+    /* ── Onboarding overlay ── */
+    .overlay {
+      position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:100;
+      display:flex; align-items:center; justify-content:center; padding:20px;
+    }
+    .overlay.hidden { display:none; }
+    .modal {
+      background:white; border-radius:18px; padding:24px 20px; width:100%; max-width:400px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+    .modal h2 { font-size:18px; font-weight:800; margin-bottom:4px; }
+    .modal .modal-sub { font-size:13px; color:var(--muted); margin-bottom:20px; }
+
+    /* ── Calendar ── */
+    .cal-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 0 8px;
+    }
+    .cal-title { font-size:16px; font-weight:800; }
+    .cal-nav-btn {
+      width:32px; height:32px; border-radius:8px; border:1.5px solid var(--border);
+      background:white; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;
+    }
+    .cal-weekdays {
+      display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin-bottom:2px;
+    }
+    .cal-wd { text-align:center; font-size:10px; font-weight:700; color:var(--muted); padding:4px 0; }
+    .cal-wd:first-child { color:#ef4444; }
+    .cal-wd:last-child { color:#2563eb; }
+    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+    .cal-cell {
+      aspect-ratio: 1; border-radius:9px; padding:4px 3px;
+      display:flex; flex-direction:column; align-items:center;
+      cursor:pointer; transition:all .15s; position:relative; background:white;
+      border: 1.5px solid transparent;
+    }
+    .cal-cell:hover { background:#f8fafc; }
+    .cal-cell.empty { background:transparent; cursor:default; }
+    .cal-cell.past { opacity: 0.45; }
+    .cal-cell.today { background:#f5f3ff; border-color:var(--focus-bd); }
+    .cal-cell.sun .cal-num { color:#ef4444; }
+    .cal-cell.sat .cal-num { color:#2563eb; }
+    .cal-cell.selected { background:#ede9fe; border-color:var(--focus); }
+    .cal-num { font-size:12px; font-weight:700; line-height:1; margin-bottom:2px; }
+    .cal-assigned-dot { width:4px;height:4px;border-radius:50%;background:var(--focus);margin-bottom:1px; }
+    .cal-dots { display:flex; flex-wrap:wrap; gap:2px; justify-content:center; align-items:center; max-width:100%; }
+    .cal-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+
+    /* ── Day detail panel ── */
+    .day-panel {
+      background:white; border-radius:14px; border:1.5px solid var(--focus-bd);
+      padding:16px 15px; margin-top:10px;
+    }
+    .day-panel-title { font-size:15px; font-weight:800; margin-bottom:12px; color:var(--focus); }
+    .day-panel-person {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px 12px; border-radius:10px; border:1.5px solid var(--border);
+      margin-bottom:6px; background:var(--bg);
+    }
+    .day-panel-person .pp { display:flex; align-items:center; gap:8px; }
+    .person-avatar {
+      width:26px; height:26px; border-radius:99px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px; font-weight:800; color:white; flex-shrink:0;
+    }
+    .day-assign-row { display:flex; align-items:center; gap:6px; padding:3px 0; font-size:13px; }
+    .day-assign-badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:10px; font-weight:700; }
+    .day-assign-badge.focus { background:#ede9fe; color:var(--focus); }
+    .day-assign-badge.external { background:#e0f2fe; color:var(--ext); }
+    .day-assign-badge.absent { background:#f3f4f6; color:var(--muted); }
+
+    /* ── Empty ── */
+    .empty { text-align:center; padding:48px 20px; color:var(--muted); }
+    .empty .ico { font-size:36px; margin-bottom:10px; }
+    .empty p { font-size:13px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Onboarding overlay ── -->
+<div class="overlay" id="onboarding">
+  <div class="modal">
+    <h2>👋 처음 오셨군요!</h2>
+    <p class="modal-sub">팀원 5명의 이름을 입력해주세요.</p>
+    <div id="onboardingFields"></div>
+    <div class="gap16"></div>
+    <button class="btn btn-primary" onclick="finishOnboarding()">시작하기</button>
+  </div>
+</div>
+
+<!-- ── Header ── -->
+<div class="header">
+  <h1>🪑 포커스룸 자리 배정</h1>
+  <div class="hdate" id="headerDate"></div>
+</div>
+
+<!-- ── Nav ── -->
+<div class="nav">
+  <button class="nav-tab active" onclick="switchTab('today',this)">
+    <span class="ti">☀️</span><span class="tl">오늘</span>
+  </button>
+  <button class="nav-tab" onclick="switchTab('tomorrow',this)">
+    <span class="ti">🔮</span><span class="tl">내일</span>
+  </button>
+  <button class="nav-tab" onclick="switchTab('calendar',this)">
+    <span class="ti">📅</span><span class="tl">캘린더</span>
+  </button>
+  <button class="nav-tab" onclick="switchTab('history',this)">
+    <span class="ti">📋</span><span class="tl">기록</span>
+  </button>
+  <button class="nav-tab" onclick="switchTab('settings',this)">
+    <span class="ti">⚙️</span><span class="tl">설정</span>
+  </button>
+</div>
+
+<!-- ── Content ── -->
+<div class="content">
+  <div class="tab-content active" id="tab-today"></div>
+  <div class="tab-content" id="tab-tomorrow"></div>
+  <div class="tab-content" id="tab-calendar"></div>
+  <div class="tab-content" id="tab-history"></div>
+  <div class="tab-content" id="tab-settings"></div>
+</div>
+
+<script>
+// ══ Constants ════════════════════════════════════════════════════════════════
+const FOCUS_SEATS    = ['포커스룸1', '포커스룸2'];
+const EXTERNAL_SEATS = ['외부1', '외부2', '외부3'];
+const ALL_SEATS      = [...FOCUS_SEATS, ...EXTERNAL_SEATS];
+const ICONS = { '포커스룸1':'🏠','포커스룸2':'🏠','외부1':'💼','외부2':'💼','외부3':'💼' };
+const DAYS_KR  = ['일','월','화','수','목','금','토'];
+const MONTHS_KR = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const P_COLORS = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626'];
+
+// ══ State ════════════════════════════════════════════════════════════════════
+function getState() {
+  try { return JSON.parse(localStorage.getItem('frState')) || mkDefault(); }
+  catch { return mkDefault(); }
+}
+function mkDefault() {
+  return { people: ['멤버1','멤버2','멤버3','멤버4','멤버5'], absencePlan: {}, days: [] };
+}
+function save(s) { localStorage.setItem('frState', JSON.stringify(s)); }
+
+function pColor(state, person) {
+  const i = state.people.indexOf(person);
+  return P_COLORS[i] ?? '#9ca3af';
+}
+function pInitial(person) { return person.slice(0,1); }
+
+// ══ Dates ════════════════════════════════════════════════════════════════════
+function todayStr() { return new Date().toISOString().slice(0,10); }
+function offsetDate(base, delta) {
+  const d = new Date(base + 'T00:00:00'); d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0,10);
+}
+function fmtDate(s) {
+  const d = new Date(s + 'T00:00:00');
+  return `${d.getMonth()+1}월 ${d.getDate()}일 (${DAYS_KR[d.getDay()]})`;
+}
+
+// ══ Algorithm ════════════════════════════════════════════════════════════════
+function focusCount(state, beforeDate) {
+  const c = {}; state.people.forEach(p => c[p] = 0);
+  state.days.forEach(day => {
+    if (day.date >= beforeDate) return;
+    Object.entries(day.assignments || {}).forEach(([p,s]) => {
+      if (s && FOCUS_SEATS.includes(s)) c[p] = (c[p]||0) + 1;
+    });
+  });
+  return c;
+}
+
+// 가장 최근 포커스룸 사용일 반환 (없으면 null → 한 번도 안 쓴 사람 = 최우선)
+function lastFocusDate(state, person, beforeDate) {
+  for (let i = state.days.length - 1; i >= 0; i--) {
+    const d = state.days[i];
+    if (d.date >= beforeDate) continue;
+    if (FOCUS_SEATS.includes(d.assignments?.[person])) return d.date;
+  }
+  return null;
+}
+
+function generate(state, targetDate, absent = []) {
+  const present = state.people.filter(p => !absent.includes(p));
+  const assignments = {}, focusDay = {}, taken = new Set();
+  absent.forEach(p => assignments[p] = null);
+
+  const prevRec = state.days.find(d => d.date === offsetDate(targetDate, -1));
+
+  if (!prevRec) {
+    FOCUS_SEATS.forEach((seat, i) => {
+      if (present[i] !== undefined) { assignments[present[i]] = seat; focusDay[present[i]] = 1; taken.add(seat); }
+    });
+    EXTERNAL_SEATS.forEach((seat, i) => {
+      const p = present[i + FOCUS_SEATS.length];
+      if (p !== undefined) { assignments[p] = seat; taken.add(seat); }
+    });
+    return { assignments, focusDay };
+  }
+
+  const stayFocus = [], leaveFocus = [];
+  present.forEach(p => {
+    const s = prevRec.assignments?.[p];
+    if (s && FOCUS_SEATS.includes(s)) {
+      ((prevRec.focusDay?.[p] || 1) < 2 ? stayFocus : leaveFocus).push(p);
+    }
+  });
+
+  stayFocus.forEach(p => {
+    const s = prevRec.assignments[p];
+    assignments[p] = s; focusDay[p] = 2; taken.add(s);
+  });
+
+  const freeFocus = FOCUS_SEATS.filter(s => !taken.has(s));
+  const needAssign = present.filter(p => !stayFocus.includes(p));
+  const counts = focusCount(state, targetDate);
+  // 우선순위: ① 포커스룸 누적 사용일 적은 순 → ② 마지막 사용일이 오래된 순 (null=한번도안씀=최우선) → ③ 등록 순서
+  const byUsage = [...needAssign].sort((a, b) => {
+    const ca = counts[a] || 0, cb = counts[b] || 0;
+    if (ca !== cb) return ca - cb;
+    const la = lastFocusDate(state, a, targetDate);
+    const lb = lastFocusDate(state, b, targetDate);
+    if (!la && !lb) return state.people.indexOf(a) - state.people.indexOf(b);
+    if (!la) return -1;
+    if (!lb) return 1;
+    return la.localeCompare(lb); // 더 오래된 날짜 = 더 오래 기다린 사람 = 우선
+  });
+  const gotFocus = [];
+  freeFocus.forEach((seat, i) => {
+    if (byUsage[i] !== undefined) {
+      assignments[byUsage[i]] = seat; focusDay[byUsage[i]] = 1; taken.add(seat); gotFocus.push(byUsage[i]);
+    }
+  });
+
+  const needExt = needAssign.filter(p => !gotFocus.includes(p));
+  const freeExt = EXTERNAL_SEATS.filter(s => !taken.has(s));
+  const unplaced = [];
+  needExt.forEach(p => {
+    const prev = prevRec.assignments?.[p];
+    if (prev && EXTERNAL_SEATS.includes(prev) && freeExt.includes(prev)) {
+      assignments[p] = prev; freeExt.splice(freeExt.indexOf(prev), 1);
+    } else { unplaced.push(p); }
+  });
+  unplaced.forEach(p => {
+    let best = null;
+    for (let i = state.days.length - 1; i >= 0; i--) {
+      const d = state.days[i]; if (d.date >= targetDate) continue;
+      const s = d.assignments?.[p];
+      if (s && EXTERNAL_SEATS.includes(s) && freeExt.includes(s)) { best = s; break; }
+    }
+    const seat = best || freeExt[0] || null;
+    if (seat) { assignments[p] = seat; freeExt.splice(freeExt.indexOf(seat), 1); }
+  });
+
+  return { assignments, focusDay };
+}
+
+// ══ UI Helpers ════════════════════════════════════════════════════════════════
+function seatType(s) {
+  if (!s) return 'absent';
+  return FOCUS_SEATS.includes(s) ? 'focus' : 'external';
+}
+
+function renderCards(state, assignments, focusDay) {
+  return ALL_SEATS.map(seat => {
+    const person = Object.entries(assignments).find(([,s]) => s === seat)?.[0];
+    const type = seatType(seat);
+    const isFocus = FOCUS_SEATS.includes(seat);
+    const dn = person && focusDay?.[person];
+    return `<div class="seat-card ${type}">
+      <div class="seat-icon">${ICONS[seat]}</div>
+      <div>
+        <div class="seat-lbl">${seat} · ${isFocus ? '포커스룸 내부':'외부 좌석'}</div>
+        <div class="person-name">${person || '—'}</div>
+        ${isFocus && dn ? `<span class="focus-badge">${dn}일차</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function absentToggles(state, absentArr, onchangeFn) {
+  return state.people.map(p => `
+    <div class="person-row">
+      <div class="pp" style="display:flex;align-items:center;gap:8px">
+        <span class="person-avatar" style="background:${pColor(state,p)}">${pInitial(p)}</span>
+        <span class="pname">${p}</span>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" ${absentArr.includes(p)?'checked':''} onchange="${onchangeFn}('${p}')">
+        <span class="slider"></span>
+      </label>
+    </div>`).join('');
+}
+
+// ══ Tab: Today ════════════════════════════════════════════════════════════════
+window._todayAbsent = null; // null = not yet loaded; array = loaded from plan or user edit
+
+function initTodayAbsent(state) {
+  if (window._todayAbsent === null) {
+    window._todayAbsent = [...(state.absencePlan?.[todayStr()] || [])];
+  }
+}
+
+function renderToday() {
+  const state = getState();
+  initTodayAbsent(state);
+  const today = todayStr();
+  const rec = state.days.find(d => d.date === today);
+  const el = document.getElementById('tab-today');
+
+  const hasPlan = (state.absencePlan?.[today] || []).length > 0;
+
+  if (!rec) {
+    el.innerHTML = `
+      <div class="gap16"></div>
+      <div class="alert alert-info">오늘 자리가 아직 배정되지 않았습니다.${hasPlan ? '<br>📅 캘린더의 부재 계획이 자동으로 반영되었습니다.' : ''}</div>
+      <div class="sec">오늘 부재 인원 <span style="font-weight:400;text-transform:none">(활성화 = 부재)</span></div>
+      ${absentToggles(state, window._todayAbsent, 'toggleTodayAbsent')}
+      <div class="gap8"></div>
+      <button class="btn btn-primary" onclick="generateToday()">오늘 자리 배정 생성</button>`;
+    return;
+  }
+
+  const absences = rec.absent || [];
+  el.innerHTML = `
+    <div class="gap16"></div>
+    <div class="sec">${fmtDate(today)} 자리 배정</div>
+    ${renderCards(state, rec.assignments, rec.focusDay)}
+    ${absences.length ? `<div class="sec">부재</div>${absences.map(p=>`
+      <div class="seat-card absent">
+        <div class="seat-icon" style="background:#f3f4f6">✈️</div>
+        <div><div class="seat-lbl">부재</div><div class="person-name">${p}</div></div>
+      </div>`).join('')}` : ''}
+    <div class="gap24"></div>
+    <button class="btn btn-danger" onclick="resetToday()">오늘 배정 초기화</button>`;
+}
+
+function toggleTodayAbsent(p) {
+  const i = window._todayAbsent.indexOf(p);
+  if (i >= 0) window._todayAbsent.splice(i,1); else window._todayAbsent.push(p);
+}
+
+function generateToday() {
+  const state = getState();
+  const today = todayStr();
+  const { assignments, focusDay } = generate(state, today, window._todayAbsent);
+  state.days = state.days.filter(d => d.date !== today);
+  state.days.push({ date: today, absent: [...window._todayAbsent], assignments, focusDay });
+  state.days.sort((a,b) => a.date.localeCompare(b.date));
+  save(state);
+  window._todayAbsent = null;
+  renderToday();
+}
+
+function resetToday() {
+  if (!confirm('오늘 배정을 초기화하시겠습니까?')) return;
+  const state = getState();
+  state.days = state.days.filter(d => d.date !== todayStr());
+  save(state); window._todayAbsent = null; renderToday();
+}
+
+// ══ Tab: Tomorrow ════════════════════════════════════════════════════════════
+window._tomAbsent = null;
+
+function initTomAbsent(state) {
+  const tom = offsetDate(todayStr(), 1);
+  if (window._tomAbsent === null) {
+    window._tomAbsent = [...(state.absencePlan?.[tom] || [])];
+  }
+}
+
+function renderTomorrow() {
+  const state = getState();
+  initTomAbsent(state);
+  const tom = offsetDate(todayStr(), 1);
+  const existing = state.days.find(d => d.date === tom);
+  const el = document.getElementById('tab-tomorrow');
+  const hasPlan = (state.absencePlan?.[tom] || []).length > 0;
+  const { assignments, focusDay } = generate(state, tom, window._tomAbsent);
+
+  el.innerHTML = `
+    <div class="gap16"></div>
+    ${existing
+      ? `<div class="alert alert-ok">✅ 내일(${fmtDate(tom)}) 배정이 확정되었습니다.</div>`
+      : `<div class="alert alert-info">내일(${fmtDate(tom)}) 예상 배정입니다.${hasPlan ? '<br>📅 캘린더의 부재 계획이 반영되었습니다.' : ''}</div>`}
+    <div class="sec">내일 부재 인원 <span style="font-weight:400;text-transform:none">(활성화 = 부재)</span></div>
+    ${absentToggles(state, window._tomAbsent, 'toggleTomAbsent')}
+    <div class="sec">예상 배정</div>
+    ${renderCards(state, assignments, focusDay)}
+    <div class="gap8"></div>
+    ${!existing
+      ? `<button class="btn btn-primary" onclick="confirmTomorrow()">내일 배정 확정</button>`
+      : `<button class="btn btn-danger" onclick="resetTomorrow()">내일 배정 초기화</button>`}`;
+}
+
+function toggleTomAbsent(p) {
+  const i = window._tomAbsent.indexOf(p);
+  if (i >= 0) window._tomAbsent.splice(i,1); else window._tomAbsent.push(p);
+  renderTomorrow();
+}
+
+function confirmTomorrow() {
+  const state = getState();
+  const tom = offsetDate(todayStr(), 1);
+  const { assignments, focusDay } = generate(state, tom, window._tomAbsent);
+  state.days = state.days.filter(d => d.date !== tom);
+  state.days.push({ date: tom, absent: [...window._tomAbsent], assignments, focusDay });
+  state.days.sort((a,b) => a.date.localeCompare(b.date));
+  save(state); renderTomorrow();
+}
+
+function resetTomorrow() {
+  if (!confirm('내일 배정을 초기화하시겠습니까?')) return;
+  const state = getState();
+  state.days = state.days.filter(d => d.date !== offsetDate(todayStr(), 1));
+  save(state); window._tomAbsent = null; renderTomorrow();
+}
+
+// ══ Tab: Calendar ════════════════════════════════════════════════════════════
+let calYear  = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let selectedDate = null;
+
+function renderCalendar() {
+  const state = getState();
+  const el = document.getElementById('tab-calendar');
+  const today = todayStr();
+  const firstDow = new Date(calYear, calMonth, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+  // Build grid cells
+  let cells = '';
+  for (let i = 0; i < firstDow; i++) cells += '<div class="cal-cell empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const mm = String(calMonth+1).padStart(2,'0');
+    const dd = String(d).padStart(2,'0');
+    const dateStr = `${calYear}-${mm}-${dd}`;
+    const dow = new Date(dateStr+'T00:00:00').getDay();
+    const isToday = dateStr === today;
+    const isPast  = dateStr < today;
+    const isSel   = dateStr === selectedDate;
+    const isSun = dow === 0, isSat = dow === 6;
+
+    const planned = state.absencePlan?.[dateStr] || [];
+    const hasAssign = !!state.days.find(d => d.date === dateStr);
+
+    const dots = planned.map(p => {
+      const c = pColor(state, p);
+      return `<span class="cal-dot" style="background:${c}" title="${p}"></span>`;
+    }).join('');
+
+    cells += `
+      <div class="cal-cell${isToday?' today':''}${isPast?' past':''}${isSel?' selected':''}${isSun?' sun':''}${isSat?' sat':''}"
+           onclick="selectCalDay('${dateStr}')">
+        <div class="cal-num">${d}</div>
+        ${hasAssign ? '<div class="cal-assigned-dot"></div>' : '<div style="height:4px;margin-bottom:1px"></div>'}
+        <div class="cal-dots">${dots}</div>
+      </div>`;
+  }
+
+  const legendHtml = state.people.map((p,i) => `
+    <span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:11px">
+      <span style="width:8px;height:8px;border-radius:50%;background:${P_COLORS[i]};display:inline-block;flex-shrink:0"></span>${p}
+    </span>`).join('');
+
+  const panelHtml = selectedDate ? renderDayPanel(state, selectedDate) : '';
+
+  el.innerHTML = `
+    <div class="cal-header">
+      <button class="cal-nav-btn" onclick="calPrev()">‹</button>
+      <div class="cal-title">${calYear}년 ${MONTHS_KR[calMonth]}</div>
+      <button class="cal-nav-btn" onclick="calNext()">›</button>
+    </div>
+    <div class="cal-weekdays">${DAYS_KR.map((d,i)=>`<div class="cal-wd">${d}</div>`).join('')}</div>
+    <div class="cal-grid">${cells}</div>
+    <div style="margin-top:10px;padding:0 2px">${legendHtml}</div>
+    <div style="margin-top:4px;font-size:10px;color:var(--muted);padding:0 2px">● 보라 점 = 포커스룸 배정 완료 &nbsp; 컬러 점 = 부재 계획</div>
+    ${panelHtml}`;
+}
+
+function renderDayPanel(state, dateStr) {
+  const planned = state.absencePlan?.[dateStr] || [];
+  const rec = state.days.find(d => d.date === dateStr);
+  const today = todayStr();
+  const isFuture = dateStr >= today;
+
+  const toggleRows = state.people.map(p => `
+    <div class="day-panel-person">
+      <div class="pp">
+        <span class="person-avatar" style="background:${pColor(state,p)}">${pInitial(p)}</span>
+        <span style="font-size:14px;font-weight:600">${p}</span>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" ${planned.includes(p)?'checked':''} onchange="togglePlan('${dateStr}','${p}')">
+        <span class="slider"></span>
+      </label>
+    </div>`).join('');
+
+  let assignSection = '';
+  if (rec) {
+    const rows = state.people.map(p => {
+      const s = rec.assignments?.[p];
+      const type = seatType(s);
+      const fd = rec.focusDay?.[p];
+      return `<div class="day-assign-row">
+        <span class="day-assign-badge ${type}">${s||'부재'}${fd?` ${fd}일차`:''}</span>
+        <span style="font-size:13px">${p}</span>
+      </div>`;
+    }).join('');
+    assignSection = `<div class="sec" style="margin-top:14px">확정 배정</div>${rows}`;
+  } else if (isFuture) {
+    assignSection = `<div class="gap8"></div>
+      <div class="alert alert-info" style="font-size:11px">아직 배정이 없습니다. 오늘/내일 탭에서 생성하거나 미리 확정할 수 있습니다.</div>`;
+  }
+
+  return `
+    <div class="day-panel">
+      <div class="day-panel-title">📅 ${fmtDate(dateStr)}</div>
+      <div class="sec" style="margin-top:0">부재 계획 <span style="font-weight:400;text-transform:none">(활성화 = 부재 예정)</span></div>
+      ${toggleRows}
+      ${assignSection}
+    </div>`;
+}
+
+function togglePlan(dateStr, person) {
+  const state = getState();
+  if (!state.absencePlan) state.absencePlan = {};
+  if (!state.absencePlan[dateStr]) state.absencePlan[dateStr] = [];
+  const arr = state.absencePlan[dateStr];
+  const i = arr.indexOf(person);
+  if (i >= 0) arr.splice(i,1); else arr.push(person);
+  if (arr.length === 0) delete state.absencePlan[dateStr];
+  save(state);
+  // Reset cached absent lists if relevant
+  const today = todayStr();
+  if (dateStr === today) window._todayAbsent = null;
+  if (dateStr === offsetDate(today, 1)) window._tomAbsent = null;
+  renderCalendar();
+}
+
+function selectCalDay(dateStr) {
+  selectedDate = selectedDate === dateStr ? null : dateStr;
+  renderCalendar();
+}
+function calPrev() {
+  calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
+  selectedDate = null; renderCalendar();
+}
+function calNext() {
+  calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; }
+  selectedDate = null; renderCalendar();
+}
+
+// ══ Tab: History ════════════════════════════════════════════════════════════
+function renderHistory() {
+  const state = getState();
+  const el = document.getElementById('tab-history');
+  const sorted = [...state.days].sort((a,b) => b.date.localeCompare(a.date)).slice(0,21);
+  if (!sorted.length) {
+    el.innerHTML = `<div class="empty"><div class="ico">📅</div><p>아직 배정 기록이 없습니다.</p></div>`;
+    return;
+  }
+  el.innerHTML = '<div class="gap16"></div>' + sorted.map(day => `
+    <div class="history-card">
+      <div class="history-date">${fmtDate(day.date)}</div>
+      ${state.people.map(p => {
+        const s = day.assignments?.[p];
+        const type = seatType(s);
+        const fd = day.focusDay?.[p];
+        return `<div class="history-row">
+          <span class="chip ${type}">${s||'부재'}${fd?` ${fd}일차`:''}</span>
+          <span>${p}</span>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+
+// ══ Tab: Settings ════════════════════════════════════════════════════════════
+function renderSettings() {
+  const state = getState();
+  const el = document.getElementById('tab-settings');
+  el.innerHTML = `
+    <div class="gap16"></div>
+    <div class="sec">팀원 이름</div>
+    ${state.people.map((p,i) => `
+      <div class="input-group">
+        <label class="input-lbl">
+          <span class="pcolor-dot" style="background:${P_COLORS[i]}"></span>
+          멤버 ${i+1}
+        </label>
+        <input class="input-field" id="sp${i}" type="text" value="${p}" placeholder="이름 입력">
+      </div>`).join('')}
+    <div class="gap8"></div>
+    <button class="btn btn-primary" onclick="savePeople()">저장</button>
+    <div class="divider"></div>
+    <div class="sec">데이터 관리</div>
+    <div class="gap8"></div>
+    <button class="btn btn-danger" onclick="clearAll()">전체 데이터 초기화</button>`;
+}
+
+function savePeople() {
+  const state = getState();
+  state.people = state.people.map((_,i) => document.getElementById(`sp${i}`)?.value?.trim() || state.people[i]);
+  save(state); alert('저장되었습니다. 앱을 새로고침하면 전체 반영됩니다.');
+}
+
+function clearAll() {
+  if (!confirm('모든 배정 기록과 부재 계획이 삭제됩니다.\n팀원 이름은 유지됩니다. 계속하시겠습니까?')) return;
+  const state = getState();
+  state.absencePlan = {}; state.days = [];
+  save(state); window._todayAbsent = null; window._tomAbsent = null;
+  selectedDate = null;
+  renderToday(); alert('초기화되었습니다.');
+}
+
+// ══ Navigation ════════════════════════════════════════════════════════════════
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(e => e.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  btn.classList.add('active');
+  ({ today:renderToday, tomorrow:renderTomorrow, calendar:renderCalendar, history:renderHistory, settings:renderSettings })[tab]?.();
+}
+
+// ══ Onboarding ════════════════════════════════════════════════════════════════
+function initOnboarding() {
+  const state = getState();
+  const isDefault = state.people.every((p,i) => p === `멤버${i+1}`);
+  if (!isDefault) { document.getElementById('onboarding').classList.add('hidden'); return; }
+
+  const fields = document.getElementById('onboardingFields');
+  fields.innerHTML = state.people.map((p,i) => `
+    <div class="input-group">
+      <label class="input-lbl">
+        <span class="pcolor-dot" style="background:${P_COLORS[i]}"></span>
+        멤버 ${i+1}
+      </label>
+      <input class="input-field" id="ob${i}" type="text" placeholder="이름 입력 (예: 홍길동)">
+    </div>`).join('');
+}
+
+function finishOnboarding() {
+  const state = getState();
+  const names = state.people.map((_,i) => document.getElementById(`ob${i}`)?.value?.trim());
+  if (names.some(n => !n)) { alert('모든 팀원 이름을 입력해주세요.'); return; }
+  state.people = names;
+  save(state);
+  document.getElementById('onboarding').classList.add('hidden');
+  renderToday();
+}
+
+// ══ Init ═════════════════════════════════════════════════════════════════════
+document.getElementById('headerDate').textContent = fmtDate(todayStr());
+initOnboarding();
+renderToday();
+</script>
+</body>
+</html>
