@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>포커스룸 자리 배정</title>
+  <meta property="og:title" content="포커스룸 자리 배정">
+  <meta property="og:description" content="팀 자율좌석 배정 앱 · 포커스룸 / 외부 좌석 자동 배정">
+  <!-- TODO: Firebase Hosting 배포 후 실제 도메인으로 교체 (예: https://your-project.web.app/domain.jpg) -->
+  <meta property="og:image" content="/domain.jpg">
+  <meta property="og:type" content="website">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#7c3aed">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="포커스룸">
+  <style>
+    :root {
+      --focus: #7c3aed; --focus-bg: #f5f3ff; --focus-bd: #c4b5fd;
+      --ext: #0284c7;   --ext-bg:   #f0f9ff; --ext-bd:   #bae6fd;
+      --bg: #f8fafc; --card: #fff; --border: #e2e8f0;
+      --text: #1e293b; --muted: #64748b; --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: white; border-bottom: 1px solid var(--border);
+      padding: 13px 18px; position: sticky; top: 0; z-index: 20;
+    }
+    .header h1 { font-size: 16px; font-weight: 700; }
+    .header .hdate { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+    /* ── Nav (5 tabs) ── */
+    .nav {
+      display: flex; background: white; border-bottom: 1px solid var(--border);
+      position: sticky; top: 50px; z-index: 19;
+    }
+    .nav-tab {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      padding: 7px 2px 6px; cursor: pointer; border: none; background: none;
+      border-bottom: 2px solid transparent; font-family: inherit; color: var(--muted);
+      transition: all 0.15s;
+    }
+    .nav-tab .ti { font-size: 15px; line-height: 1; }
+    .nav-tab .tl { font-size: 9px; font-weight: 600; margin-top: 2px; letter-spacing: -0.01em; }
+    .nav-tab.active { color: var(--focus); border-bottom-color: var(--focus); }
+
+    /* ── Layout ── */
+    .content { padding: 0 15px 36px; max-width: 480px; margin: 0 auto; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .sec { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 18px 0 8px; }
+    .gap8 { height: 8px; } .gap16 { height: 16px; } .gap24 { height: 24px; }
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+    /* ── Seat cards ── */
+    .seat-card {
+      background: var(--card); border-radius: 12px; border: 1.5px solid var(--border);
+      padding: 13px 15px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px;
+    }
+    .seat-card.focus { border-color: var(--focus-bd); background: var(--focus-bg); }
+    .seat-card.external { border-color: var(--ext-bd); background: var(--ext-bg); }
+    .seat-card.absent { opacity: 0.5; }
+    .seat-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+    }
+    .seat-card.focus .seat-icon { background: #ede9fe; }
+    .seat-card.external .seat-icon { background: #e0f2fe; }
+    .seat-card.absent .seat-icon { background: #f3f4f6; }
+    .seat-lbl { font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+    .seat-card.focus .seat-lbl { color: var(--focus); }
+    .seat-card.external .seat-lbl { color: var(--ext); }
+    .person-name { font-size: 15px; font-weight: 700; }
+    .focus-badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      background: #ede9fe; color: var(--focus); padding: 1px 7px; border-radius: 99px; margin-top: 3px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: block; width: 100%; padding: 13px; border-radius: 12px; border: none;
+      font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.15s;
+    }
+    .btn + .btn { margin-top: 8px; }
+    .btn-primary { background: var(--focus); color: white; }
+    .btn-primary:active { background: #6d28d9; }
+    .btn-secondary { background: white; color: var(--text); border: 1.5px solid var(--border); }
+    .btn-danger { background: white; color: var(--danger); border: 1.5px solid #fecaca; }
+
+    /* ── Person rows ── */
+    .person-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; background: white; border-radius: 12px;
+      border: 1.5px solid var(--border); margin-bottom: 7px;
+    }
+    .person-row .pname { font-size: 14px; font-weight: 600; }
+    .person-row .psub { font-size: 11px; color: var(--muted); }
+    .toggle { position: relative; width: 42px; height: 23px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top:0;left:0;right:0;bottom:0; background:#d1d5db; border-radius:23px; transition:.2s; }
+    .slider:before { content:''; position:absolute; width:17px;height:17px;left:3px;bottom:3px; background:white;border-radius:50%;transition:.2s; }
+    .toggle input:checked + .slider { background: var(--danger); }
+    .toggle input:checked + .slider:before { transform: translateX(19px); }
+
+    /* ── Alert ── */
+    .alert { padding: 11px 13px; border-radius: 10px; font-size: 12px; margin-bottom: 4px; line-height: 1.6; }
+    .alert-info { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+    .alert-warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+    .alert-ok   { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+
+    /* ── History ── */
+    .history-card { background:white; border-radius:12px; border:1.5px solid var(--border); padding:14px 15px; margin-bottom:9px; }
+    .history-date { font-size:11px; font-weight:700; color:var(--muted); margin-bottom:8px; }
+    .history-row { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:13px; }
+    .chip { font-size:10px; font-weight:700; padding:2px 7px; border-radius:99px; white-space:nowrap; }
+    .chip.focus { background:#ede9fe; color:var(--focus); }
+    .chip.external { background:#e0f2fe; color:var(--ext); }
+    .chip.absent { background:#f3f4f6; color:var(--muted); }
+
+    /* ── Settings inputs ── */
+    .input-group { margin-bottom: 8px; }
+    .input-lbl { font-size:11px; font-weight:700; color:var(--muted); display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+    .pcolor-dot { width:9px;height:9px;border-radius:50%;display:inline-block; flex-shrink:0; }
+    .input-field {
+      width:100%; padding:11px 13px; border-radius:10px; border:1.5px solid var(--border);
+      font-size:14px; font-family:inherit; outline:none; transition:border-color .2s; background:white;
+    }
+    .input-field:focus { border-color: var(--focus); }
+    .notif-card { background:white; border-radius:12px; border:1.5px solid var(--border); padding:14px 15px; margin-bottom:9px; }
+
+    /* ── Onboarding overlay ── */
+    .overlay {
+      position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:100;
+      display:flex; align-items:center; justify-content:center; padding:20px;
+    }
+    .overlay.hidden { display:none; }
+    .modal {
+      background:white; border-radius:18px; padding:24px 20px; width:100%; max-width:400px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+    .modal h2 { font-size:18px; font-weight:800; margin-bottom:4px; }
+    .modal .modal-sub { font-size:13px; color:var(--muted); margin-bottom:20px; }
+
+    /* ── Calendar ── */
+    .cal-person-select {
+      width:100%; padding:10px 12px; border-radius:10px; border:1.5px solid var(--border);
+      font-size:13px; font-family:inherit; margin-top:12px; margin-bottom:6px; background:white; font-weight:600;
+    }
+    .cal-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 0 8px;
+    }
+    .cal-title { font-size:16px; font-weight:800; }
+    .cal-nav-btn {
+      width:32px; height:32px; border-radius:8px; border:1.5px solid var(--border);
+      background:white; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;
+    }
+    .cal-weekdays {
+      display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin-bottom:2px;
+    }
+    .cal-wd { text-align:center; font-size:10px; font-weight:700; color:var(--muted); padding:4px 0; }
+    .cal-wd:first-child { color:#ef4444; }
+    .cal-wd:last-child { color:#2563eb; }
+    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; touch-action:none; user-select:none; }
+    .cal-cell {
+      aspect-ratio: 1; border-radius:9px; padding:4px 3px;
+      display:flex; flex-direction:column; align-items:center;
+      cursor:pointer; transition:all .15s; position:relative; background:white;
+      border: 1.5px solid transparent;
+    }
+    .cal-cell:hover { background:#f8fafc; }
+    .cal-cell.empty { background:transparent; cursor:default; }
+    .cal-cell.past { opacity: 0.45; }
+    .cal-cell.today { background:#f5f3ff; border-color:var(--focus-bd); }
+    .cal-cell.sun .cal-num { color:#ef4444; }
+    .cal-cell.sat .cal-num { color:#2563eb; }
+    .cal-cell.selected { background:#ede9fe; border-color:var(--focus); }
+    .cal-cell.pfocus { background:var(--focus-bg); border-color:var(--focus-bd); }
+    .cal-cell.pext { background:var(--ext-bg); border-color:var(--ext-bd); }
+    .cal-cell.pabsent { background:#f3f4f6; }
+    .cal-cell.offday { background:#f8fafc; color:var(--muted); }
+    .cal-cell.offday .cal-num { color:var(--muted); }
+    .cal-cell.holiday { background:#fff7ed; border-color:#fed7aa; }
+    .cal-cell.range-selected { background:#ede9fe; border-color:var(--focus); box-shadow: inset 0 0 0 1.5px var(--focus); }
+    .cal-num { font-size:12px; font-weight:700; line-height:1; margin-bottom:2px; }
+    .cal-assigned-dot { width:4px;height:4px;border-radius:50%;background:var(--focus);margin-bottom:1px; }
+    .cal-dots { display:flex; flex-wrap:wrap; gap:2px; justify-content:center; align-items:center; max-width:100%; }
+    .cal-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+
+    /* ── Day detail panel ── */
+    .day-panel {
+      background:white; border-radius:14px; border:1.5px solid var(--focus-bd);
+      padding:16px 15px; margin-top:10px;
+    }
+    .day-panel-title { font-size:15px; font-weight:800; margin-bottom:12px; color:var(--focus); }
+    .day-panel-person {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px 12px; border-radius:10px; border:1.5px solid var(--border);
+      margin-bottom:6px; background:var(--bg);
+    }
+    .day-panel-person .pp { display:flex; align-items:center; gap:8px; }
+    .person-avatar {
+      width:26px; height:26px; border-radius:99px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px; font-weight:800; color:white; flex-shrink:0;
+    }
+    .day-assign-row { display:flex; align-items:center; gap:6px; padding:3px 0; font-size:13px; }
+    .day-assign-badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:10px; font-weight:700; }
+    .day-assign-badge.focus { background:#ede9fe; color:var(--focus); }
+    .day-assign-badge.external { background:#e0f2fe; color:var(--ext); }
+    .day-assign-badge.absent { background:#f3f4f6; color:var(--muted); }
+
+    /* ── Empty ── */
+    .empty { text-align:center; padding:48px 20px; color:var(--muted); }
+    .empty .ico { font-size:36px; margin-bottom:10px; }
+    .empty p { font-size:13px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Onboarding overlay ── -->
+<div class="overlay hidden" id="onboarding">
+  <div class="modal">
+    <h2>👋 처음 오셨군요!</h2>
+    <p class="modal-sub">팀원 5명의 이름을 입력해주세요. (한 명이 입력하면 모두에게 공유됩니다)</p>
+    <div id="onboardingFields"></div>
+    <div class="gap16"></div>
+    <button class="btn btn-primary" onclick="finishOnboarding()">시작하기</button>
+  </div>
+</div>
+
+<!-- ── Header ── -->
+<div class="header">
+  <h1>🪑 포커스룸 자리 배정</h1>
+  <div class="hdate" id="headerDate"></div>
+</div>
+
+<!-- ── Nav ── -->
+<div class="nav">
+  <button class="nav-tab" data-tab="today" onclick="switchTab('today',this)">
+    <span class="ti">☀️</span><span class="tl">오늘</span>
+  </button>
+  <button class="nav-tab" data-tab="tomorrow" onclick="switchTab('tomorrow',this)">
+    <span class="ti">🔮</span><span class="tl">내일</span>
+  </button>
+  <button class="nav-tab" data-tab="calendar" onclick="switchTab('calendar',this)">
+    <span class="ti">📅</span><span class="tl">캘린더</span>
+  </button>
+  <button class="nav-tab" data-tab="history" onclick="switchTab('history',this)">
+    <span class="ti">📋</span><span class="tl">기록</span>
+  </button>
+  <button class="nav-tab" data-tab="settings" onclick="switchTab('settings',this)">
+    <span class="ti">⚙️</span><span class="tl">설정</span>
+  </button>
+</div>
+
+<!-- ── Content ── -->
+<div class="content">
+  <div class="tab-content" id="tab-today"></div>
+  <div class="tab-content" id="tab-tomorrow"></div>
+  <div class="tab-content active" id="tab-calendar"></div>
+  <div class="tab-content" id="tab-history"></div>
+  <div class="tab-content" id="tab-settings"></div>
+</div>
+
+<script src="/js/firebase-config.js"></script>
+<script src="/js/assign.js"></script>
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "focus-room-functions",
+  "description": "포커스룸 자리 배정 - Cloud Functions (부재 입력 webhook, 배정 생성, 매일 아침 FCM 알림)",
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.5.0",
+    "firebase-functions": "^5.1.1"
+  },
+  "private": true
+}

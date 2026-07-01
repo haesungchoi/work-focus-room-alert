@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// 이 앱은 로그인 기능이 없는 5인 내부 도구라서, 클라이언트는 전부 "읽기 전용"으로 두고
+// 실제 쓰기(부재 등록, 배정 생성, 토큰 저장 등)는 전부 Cloud Functions(Admin SDK, 이 rules를 우회함)를 통해서만 이루어지게 한다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /absencePlan/{date} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /days/{date} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /holidays/{date} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /tokens/{person} {
+      // 토큰 자체는 남에게 보일 필요 없는 정보라 읽기도 막는다.
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}
