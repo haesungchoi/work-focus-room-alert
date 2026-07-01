@@ -26,6 +26,7 @@
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
       background: var(--bg); color: var(--text); min-height: 100vh;
+      overflow-x: hidden;
     }
 
     /* ── Header ── */
@@ -168,12 +169,13 @@
     .cal-wd { text-align:center; font-size:10px; font-weight:700; color:var(--muted); padding:4px 0; }
     .cal-wd:first-child { color:#ef4444; }
     .cal-wd:last-child { color:#2563eb; }
-    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; touch-action:none; user-select:none; }
+    .cal-grid { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:2px; touch-action:none; user-select:none; }
     .cal-cell {
       aspect-ratio: 1; border-radius:9px; padding:4px 3px;
       display:flex; flex-direction:column; align-items:center;
       cursor:pointer; transition:all .15s; position:relative; background:white;
       border: 1.5px solid transparent;
+      min-width: 0; overflow: hidden;
     }
     .cal-cell:hover { background:#f8fafc; }
     .cal-cell.empty { background:transparent; cursor:default; }

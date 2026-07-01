@@ -310,8 +310,8 @@ function renderCalendar() {
       const seat = rec.assignments?.[calPerson];
       const t = seatType(seat);
       personCls = t === 'focus' ? ' pfocus' : t === 'external' ? ' pext' : ' pabsent';
-      const label = seat || '부재';
-      inner = `<div class="cal-num">${d}</div><div style="font-size:8px;font-weight:700;line-height:1.1;text-align:center">${label}</div>`;
+      const label = seat ? seat.replace('포커스룸', '포룸') : '부재';
+      inner = `<div class="cal-num">${d}</div><div style="font-size:8px;font-weight:700;line-height:1.1;text-align:center;white-space:nowrap">${label}</div>`;
     } else {
       const planned = absencePlanFor(dateStr);
       const dots = planned.map((p) => `<span class="cal-dot" style="background:${pColor(p)}" title="${p} 부재"></span>`).join('');
