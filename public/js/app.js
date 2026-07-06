@@ -25,7 +25,8 @@ const callRegisterToken = httpsCallable(functionsClient, 'registerToken');
 const ICONS = { '포룸 S7': '🏠', '포룸 S8': '🏠', S45: '💼', S42: '💼', S27: '💼' };
 const DAYS_KR = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS_KR = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
-const P_COLORS = ['#7c3aed', '#2563eb', '#059669', '#d97706', '#dc2626'];
+// 포커스룸(내부 좌석) 강조에 쓰는 액센트 블루(#3E6AE1)와 겹치지 않도록 고른 5명 구분용 색상
+const P_COLORS = ['#6D28D9', '#0D9488', '#B45309', '#B3261E', '#475569'];
 const DEFAULT_PEOPLE = ['멤버1', '멤버2', '멤버3', '멤버4', '멤버5'];
 
 // ══ Reactive state (Firestore가 진실 공급원, 여기는 화면용 미러) ═══════════════
@@ -186,7 +187,7 @@ function renderToday() {
     ${renderCards(rec.assignments, rec.focusDay, rec.extraExternalCount)}
     ${absences.length ? `<div class="sec">부재</div>${absences.map((p) => `
       <div class="seat-card absent">
-        <div class="seat-icon" style="background:#f3f4f6">✈️</div>
+        <div class="seat-icon" style="background:rgba(23,26,32,0.06)">✈️</div>
         <div><div class="seat-lbl">부재</div><div class="person-name">${p}</div></div>
       </div>`).join('')}` : ''}
     <div class="gap24"></div>
@@ -350,8 +351,8 @@ function renderCalendar() {
 
   const panelHtml = rangeSelection ? renderRangePanel() : (selectedDate ? renderDayPanel(selectedDate) : '');
   const legendNote = calPerson === '__all__'
-    ? '● 보라 점 = 포커스룸 배정 완료 &nbsp; 컬러 점 = 부재 계획 &nbsp; 날짜를 드래그하면 기간을 한 번에 등록할 수 있어요'
-    : '보라 = 포커스룸 · 파랑 = 외부 좌석 · 회색 = 부재 (음영 없는 날은 아직 예측할 데이터가 없음)';
+    ? '● 파란 점 = 포커스룸 배정 완료 &nbsp; 컬러 점 = 부재 계획 &nbsp; 날짜를 드래그하면 기간을 한 번에 등록할 수 있어요'
+    : '파랑 = 포커스룸 · 회색 = 외부 좌석 · 옅은 회색 = 부재 (음영 없는 날은 아직 예측할 데이터가 없음)';
 
   el.innerHTML = `
     ${personSelectHtml}
