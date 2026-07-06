@@ -15,7 +15,7 @@ messaging.onBackgroundMessage((payload) => {
   });
 });
 
-const SHELL_CACHE = 'focus-room-shell-v1';
+const SHELL_CACHE = 'focus-room-shell-v2';
 const SHELL_FILES = [
   '/',
   '/manifest.json',
