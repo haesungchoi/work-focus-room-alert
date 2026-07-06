@@ -22,7 +22,7 @@ const callSavePeople = httpsCallable(functionsClient, 'savePeople');
 const callRegisterToken = httpsCallable(functionsClient, 'registerToken');
 
 // ══ Constants ════════════════════════════════════════════════════════════════
-const ICONS = { '포커스룸1': '🏠', '포커스룸2': '🏠', '외부1': '💼', '외부2': '💼', '외부3': '💼' };
+const ICONS = { '포룸 S7': '🏠', '포룸 S8': '🏠', S45: '💼', S42: '💼', S27: '💼' };
 const DAYS_KR = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS_KR = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 const P_COLORS = ['#7c3aed', '#2563eb', '#059669', '#d97706', '#dc2626'];
@@ -321,8 +321,8 @@ function renderCalendar() {
       const seat = rec.assignments?.[calPerson];
       const t = seatType(seat);
       personCls = t === 'focus' ? ' pfocus' : t === 'external' ? ' pext' : ' pabsent';
-      const label = seat ? seat.replace('포커스룸', '포룸') : '부재';
-      inner = `<div class="cal-num">${d}</div><div style="font-size:8px;font-weight:700;line-height:1.1;text-align:center;white-space:nowrap">${label}</div>`;
+      const label = seat || '부재';
+      inner = `<div class="cal-num">${d}</div><div style="font-size:8px;font-weight:700;line-height:1.1;text-align:center">${label}</div>`;
     } else {
       const planned = absencePlanFor(dateStr);
       const dots = planned.map((p) => `<span class="cal-dot" style="background:${pColor(p)}" title="${p} 부재"></span>`).join('');

@@ -75,6 +75,17 @@ async function computeAndSaveDay(targetDate, absentOverride) {
   return record;
 }
 
+// 이미 확정된 날짜라면, 부재/추가좌석 등이 바뀔 때마다 자동으로 재생성해서 항상 최신 상태로 맞춰둔다.
+// (확정 안 된 날짜는 오늘/내일 탭·캘린더 패널에서 실시간 미리보기로 이미 반영되므로 건드릴 필요 없음)
+async function regenerateIfConfirmed(date) {
+  try {
+    const existing = await db.collection('days').doc(date).get();
+    if (existing.exists) await computeAndSaveDay(date);
+  } catch (err) {
+    console.error(`확정된 날짜 자동 재생성 실패 (${date}):`, err.message);
+  }
+}
+
 // ── Callable: 팀원 이름 저장 ─────────────────────────────────────────────
 exports.savePeople = onCall((req) => {
   const people = req.data?.people;
@@ -98,6 +109,7 @@ exports.setAbsence = onCall(async (req) => {
     if (set.size === 0) tx.delete(ref);
     else tx.set(ref, { people: [...set] });
   });
+  await regenerateIfConfirmed(date);
   return { ok: true };
 });
 
@@ -115,6 +127,7 @@ exports.setAbsenceRange = onCall(async (req) => {
     batch.set(ref, { people: op }, { merge: true });
   });
   await batch.commit();
+  await Promise.all(dates.map(regenerateIfConfirmed));
   return { ok: true, count: dates.length };
 });
 
@@ -148,6 +161,7 @@ exports.setExtraSeats = onCall(async (req) => {
   const ref = db.collection('extraSeats').doc(date);
   if (count === 0) await ref.delete();
   else await ref.set({ count });
+  await regenerateIfConfirmed(date);
   return { ok: true };
 });
 

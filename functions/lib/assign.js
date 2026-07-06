@@ -7,8 +7,8 @@
     root.FocusAssign = factory();
   }
 })(typeof self !== 'undefined' ? self : this, function () {
-  const FOCUS_SEATS = ['포커스룸1', '포커스룸2'];
-  const EXTERNAL_SEATS = ['외부1', '외부2', '외부3'];
+  const FOCUS_SEATS = ['포룸 S7', '포룸 S8'];
+  const EXTERNAL_SEATS = ['S45', 'S42', 'S27'];
   const ALL_SEATS = [...FOCUS_SEATS, ...EXTERNAL_SEATS];
 
   // toISOString()은 항상 UTC 기준이라 KST(UTC+9) 등 UTC가 아닌 시간대에서는
