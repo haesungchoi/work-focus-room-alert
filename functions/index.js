@@ -1,5 +1,4 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
-const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
@@ -7,24 +6,12 @@ const assign = require('./lib/assign');
 
 admin.initializeApp();
 const db = admin.firestore();
-const messaging = admin.messaging();
 
 setGlobalOptions({ region: 'asia-northeast3', maxInstances: 5 });
 
 const FORM_WEBHOOK_SECRET = defineSecret('FORM_WEBHOOK_SECRET');
 const TEAM_DOC = db.collection('config').doc('team');
 const DEFAULT_PEOPLE = ['멤버1', '멤버2', '멤버3', '멤버4', '멤버5'];
-
-function kstDateStr(d = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(d);
-}
-
-// FCM이 "이 토큰으로는 다시는 보낼 수 없다"고 확정적으로 알려주는 에러들.
-// (예: 기기에서 앱을 지웠거나, iOS Safari가 오래 안 켠 PWA의 푸시 구독을 만료시킨 경우)
-function isDeadTokenError(err) {
-  const code = err?.code || err?.errorInfo?.code || '';
-  return code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token';
-}
 
 async function getPeople() {
   const snap = await TEAM_DOC.get();
@@ -217,44 +204,6 @@ exports.resetAllData = onCall(async () => {
   return { ok: true };
 });
 
-// ── Callable: 이 기기의 FCM 토큰을 팀원 한 명과 연결 (알림 받을 사람 등록) ─
-exports.registerToken = onCall(async (req) => {
-  const { person, token } = req.data || {};
-  if (!person || !token) throw new HttpsError('invalid-argument', 'person, token이 필요합니다.');
-  await db
-    .collection('tokens')
-    .doc(person)
-    .set({ token, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-  return { ok: true };
-});
-
-// ── Callable: 등록된 토큰으로 지금 바로 테스트 알림 발송 (07:30까지 기다리지 않고 즉시 진단) ─
-exports.sendTestNotification = onCall(async (req) => {
-  const { person } = req.data || {};
-  if (!person) throw new HttpsError('invalid-argument', 'person이 필요합니다.');
-  const tokenDoc = await db.collection('tokens').doc(person).get();
-  if (!tokenDoc.exists) {
-    throw new HttpsError('failed-precondition', '등록된 알림 토큰이 없습니다. 먼저 "평일 아침 알림 켜기"를 눌러주세요.');
-  }
-  try {
-    await messaging.send({
-      token: tokenDoc.data().token,
-      notification: { title: '🪑 테스트 알림', body: '이 알림이 보이면 푸시 설정이 정상 동작하는 것입니다.' },
-      webpush: { fcmOptions: { link: '/' } },
-    });
-    return { ok: true };
-  } catch (err) {
-    if (isDeadTokenError(err)) {
-      await tokenDoc.ref.delete();
-      throw new HttpsError(
-        'failed-precondition',
-        '저장된 알림 토큰이 만료되어 삭제했습니다. "평일 아침 알림 켜기"(또는 "이 기기 알림 다시 등록")를 다시 눌러 새로 등록해주세요.'
-      );
-    }
-    throw new HttpsError('internal', `발송 실패 [${err.code || 'unknown'}]: ${err.message}`);
-  }
-});
-
 // ── HTTP: Google Form 응답을 Apps Script가 이 URL로 전달 (부재 계획 등록) ─
 // 요청 형식: POST { person: "이름", dates: ["2026-07-10", "2026-07-11"] }
 // 헤더: x-webhook-secret: <FORM_WEBHOOK_SECRET 값>
@@ -275,39 +224,4 @@ exports.absenceWebhook = onRequest({ secrets: [FORM_WEBHOOK_SECRET] }, async (re
   });
   await batch.commit();
   res.status(200).send('ok');
-});
-
-// ── 스케줄: 평일 07:30 (KST) — 오늘 배정이 없으면 생성 후, 팀원별로 자리 푸시 발송 ─
-exports.dailyAssignAndNotify = onSchedule({ schedule: '30 7 * * 1-5', timeZone: 'Asia/Seoul' }, async () => {
-  const today = kstDateStr();
-  if (await isHoliday(today)) {
-    console.log(`${today}는 휴무일로 등록되어 있어 배정/알림을 건너뜁니다.`);
-    return;
-  }
-  const existing = await db.collection('days').doc(today).get();
-  const record = existing.exists ? existing.data() : await computeAndSaveDay(today);
-
-  const tokensSnap = await db.collection('tokens').get();
-  const tokenByPerson = {};
-  tokensSnap.docs.forEach((d) => (tokenByPerson[d.id] = d.data().token));
-
-  await Promise.all(
-    Object.entries(record.assignments || {}).map(async ([person, seat]) => {
-      const token = tokenByPerson[person];
-      if (!token) return;
-      const body = seat ? `오늘 자리는 [${seat}] 입니다.` : '오늘은 부재로 처리되었습니다.';
-      try {
-        await messaging.send({
-          token,
-          notification: { title: '🪑 오늘의 자리', body },
-          webpush: { fcmOptions: { link: '/' } },
-        });
-      } catch (err) {
-        console.error(`FCM 발송 실패 (${person}):`, err.code || err.message);
-        if (isDeadTokenError(err)) {
-          await db.collection('tokens').doc(person).delete().catch(() => {});
-        }
-      }
-    })
-  );
 });

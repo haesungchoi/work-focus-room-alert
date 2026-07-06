@@ -1,9 +1,8 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js';
 import { getFirestore, doc, collection, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-functions.js';
-// firebase-messaging은 알림을 실제로 켤 때만 동적 import — 대부분의 방문에서는 안 쓰는 SDK라 초기 로드에서 뺀다.
 
-// firebase-config.js (classic <script>, loaded before this module) provides window.FIREBASE_CONFIG / FIREBASE_VAPID_KEY
+// firebase-config.js (classic <script>, loaded before this module) provides window.FIREBASE_CONFIG
 // assign.js (classic <script>, loaded before this module) provides window.FocusAssign
 const { projectRange, offsetDate, toDateStr, isWeekend, buildExternalSeats, FOCUS_SEATS } = window.FocusAssign;
 
@@ -20,8 +19,6 @@ const callGenerateDay = httpsCallable(functionsClient, 'generateDay');
 const callResetDay = httpsCallable(functionsClient, 'resetDay');
 const callResetAllData = httpsCallable(functionsClient, 'resetAllData');
 const callSavePeople = httpsCallable(functionsClient, 'savePeople');
-const callRegisterToken = httpsCallable(functionsClient, 'registerToken');
-const callSendTestNotification = httpsCallable(functionsClient, 'sendTestNotification');
 
 // ══ Constants ════════════════════════════════════════════════════════════════
 const ICONS = { '포룸 S7': '🏠', '포룸 S8': '🏠', S45: '💼', S42: '💼', S27: '💼' };
@@ -325,7 +322,7 @@ function renderCalendar() {
     let personCls = '';
     let inner;
     if (offDay) {
-      inner = `<div class="cal-num">${d}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">${holiday ? '🎌' : '휴무'}</div>`;
+      inner = `<div class="cal-num">${d}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">${holiday ? '💤' : '휴무'}</div>`;
     } else if (calPerson !== '__all__' && rec) {
       const seat = rec.assignments?.[calPerson];
       const t = seatType(seat);
@@ -386,7 +383,7 @@ function renderRangePanel() {
         <select class="input-field" id="rangePersonSelect">${personOptions}</select>
       </div>
       <button class="btn btn-primary" onclick="frConfirmRangeAbsence()">이 기간 부재로 등록</button>
-      <button class="btn btn-secondary" onclick="frConfirmRangeHoliday()">🎌 회사 휴무일(연휴 등)로 등록</button>
+      <button class="btn btn-secondary" onclick="frConfirmRangeHoliday()">💤 회사 휴무일(연휴 등)로 등록</button>
       <button class="btn btn-secondary" onclick="frCancelRange()">취소</button>
     </div>`;
 }
@@ -434,6 +431,16 @@ async function frRemoveHoliday(dateStr) {
 }
 window.frRemoveHoliday = frRemoveHoliday;
 
+async function frMarkDayHoliday(dateStr) {
+  if (!confirm(`${fmtDate(dateStr)}을(를) 회사 휴무일로 등록할까요?\n이미 배정이 확정되어 있다면 함께 삭제됩니다.`)) return;
+  try {
+    await callSetHolidayRange({ startDate: dateStr, endDate: dateStr, isHoliday: true });
+  } catch (err) {
+    alert('휴무일 등록에 실패했습니다: ' + err.message);
+  }
+}
+window.frMarkDayHoliday = frMarkDayHoliday;
+
 async function frAdjustExtraSeats(dateStr, delta) {
   const next = Math.max(0, Math.min(5, extraSeatsFor(dateStr) + delta));
   try {
@@ -451,7 +458,7 @@ function renderDayPanel(dateStr) {
     return `
       <div class="day-panel">
         <div class="day-panel-title">📅 ${fmtDate(dateStr)}</div>
-        <div class="alert alert-info">${weekend ? '주말은 근무일이 아니라 좌석을 배정하지 않습니다.' : '🎌 회사 휴무일로 등록된 날짜라 좌석을 배정하지 않습니다.'}</div>
+        <div class="alert alert-info">${weekend ? '주말은 근무일이 아니라 좌석을 배정하지 않습니다.' : '💤 회사 휴무일로 등록된 날짜라 좌석을 배정하지 않습니다.'}</div>
         ${holiday ? `<div class="gap8"></div><button class="btn btn-secondary" onclick="frRemoveHoliday('${dateStr}')">휴무일 해제</button>` : ''}
       </div>`;
   }
@@ -508,6 +515,8 @@ function renderDayPanel(dateStr) {
       <div class="sec">부재 계획 <span style="font-weight:400;text-transform:none">(활성화 = 부재 예정)</span></div>
       ${toggleRows}
       ${assignSection}
+      <div class="gap8"></div>
+      <button class="btn btn-secondary" onclick="frMarkDayHoliday('${dateStr}')">💤 이 날짜를 회사 휴무일(연휴 등)로 등록</button>
     </div>`;
 }
 
@@ -594,7 +603,7 @@ function renderExtraSeatsTab() {
 
     let inner;
     if (offDay) {
-      inner = `<div class="cal-num">${d}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">${holiday ? '🎌' : '휴무'}</div>`;
+      inner = `<div class="cal-num">${d}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">${holiday ? '💤' : '휴무'}</div>`;
     } else {
       inner = `<div class="cal-num">${d}</div>${count > 0 ? `<div style="font-size:10px;font-weight:500;color:var(--accent)">+${count}</div>` : '<div style="height:12px"></div>'}`;
     }
@@ -629,7 +638,7 @@ function renderExtraDayPanel(dateStr) {
     return `
       <div class="day-panel">
         <div class="day-panel-title">📅 ${fmtDate(dateStr)}</div>
-        <div class="alert alert-info">${weekend ? '주말은 근무일이 아니라 좌석을 배정하지 않습니다.' : '🎌 회사 휴무일로 등록된 날짜라 좌석을 배정하지 않습니다.'}</div>
+        <div class="alert alert-info">${weekend ? '주말은 근무일이 아니라 좌석을 배정하지 않습니다.' : '💤 회사 휴무일로 등록된 날짜라 좌석을 배정하지 않습니다.'}</div>
       </div>`;
   }
   const extraCount = extraSeatsFor(dateStr);
@@ -766,18 +775,8 @@ function renderHistory() {
 }
 
 // ══ Tab: 설정 ════════════════════════════════════════════════════════════════
-function isIos() {
-  return /iP(hone|od|ad)/.test(navigator.userAgent);
-}
-function isIosNonStandalone() {
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-  return isIos() && !isStandalone;
-}
-
 function renderSettings() {
   const el = document.getElementById('tab-settings');
-  const devicePerson = localStorage.getItem('frDeviceOwner') || '';
-  const notifOn = !!localStorage.getItem('frNotifRegistered');
 
   el.innerHTML = `
     <div class="gap16"></div>
@@ -792,25 +791,6 @@ function renderSettings() {
       </div>`).join('')}
     <div class="gap8"></div>
     <button class="btn btn-primary" onclick="frSavePeople()">저장</button>
-
-    <div class="divider"></div>
-    <div class="sec">🔔 아침 자리 알림</div>
-    <div class="notif-card">
-      <div class="input-group">
-        <label class="input-lbl">이 기기는 누구의 것인가요?</label>
-        <select class="input-field" id="notifPersonSelect">
-          <option value="">선택 안 함</option>
-          ${state.people.map((p) => `<option value="${p}" ${devicePerson === p ? 'selected' : ''}>${p}</option>`).join('')}
-        </select>
-      </div>
-      ${isIosNonStandalone()
-        ? `<div class="alert alert-warn">iPhone은 이 페이지를 <b>공유 → 홈 화면에 추가</b>로 설치한 뒤, 설치된 앱 아이콘으로 열어야 알림을 받을 수 있습니다.</div>`
-        : `<button class="btn btn-primary" onclick="frEnableNotification()">${notifOn ? '이 기기 알림 다시 등록' : '평일 아침 알림 켜기'}</button>
-           ${notifOn ? `<button class="btn btn-secondary" onclick="frSendTestNotification()">지금 테스트 알림 받기</button>` : ''}
-           <div class="gap8"></div>
-           <div class="alert alert-info" style="font-size:11px">등록하면 평일 07:30에 그날 배정된 자리를 이 기기로 알려드립니다. 팀원별로 각자 본인 폰에서 등록해야 합니다. 알림이 안 온다면 "지금 테스트 알림 받기"로 즉시 확인해보세요.</div>
-           ${isIos() ? `<div class="gap8"></div><div class="alert alert-warn" style="font-size:11px">iPhone은 애플/파이어베이스 쪽의 알려진 제약으로, 앱을 오래 안 열면(백그라운드 상태) 알림 토큰이 갱신되지 않아 가끔 못 받을 수 있습니다. 이 앱을 열 때마다 자동으로 토큰을 새로고침하도록 해두었지만, 100% 보장은 아니라서 매일 아침 "오늘" 탭으로 한 번씩 확인하시는 걸 권장드려요.</div>` : ''}`}
-    </div>
 
     <div class="divider"></div>
     <div class="sec">데이터 관리</div>
@@ -828,43 +808,6 @@ async function frSavePeople() {
   }
 }
 window.frSavePeople = frSavePeople;
-
-async function frEnableNotification() {
-  const person = document.getElementById('notifPersonSelect')?.value;
-  if (!person) { alert('이 기기가 누구의 것인지 먼저 선택해주세요.'); return; }
-  try {
-    const { getMessaging, getToken, isSupported } = await import('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging.js');
-    const supported = await isSupported();
-    if (!supported) { alert('이 브라우저는 푸시 알림을 지원하지 않습니다.'); return; }
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') { alert('알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.'); return; }
-    const registration = await navigator.serviceWorker.ready;
-    const messaging = getMessaging(app);
-    const token = await getToken(messaging, { vapidKey: window.FIREBASE_VAPID_KEY, serviceWorkerRegistration: registration });
-    if (!token) { alert('알림 토큰을 발급받지 못했습니다.'); return; }
-    await callRegisterToken({ person, token });
-    localStorage.setItem('frDeviceOwner', person);
-    localStorage.setItem('frCalPerson', person);
-    localStorage.setItem('frNotifRegistered', '1');
-    alert(`${person}님 기기로 알림이 등록되었습니다. 평일 07:30에 자리를 알려드립니다.`);
-    renderSettings();
-  } catch (err) {
-    alert('알림 등록에 실패했습니다: ' + err.message);
-  }
-}
-window.frEnableNotification = frEnableNotification;
-
-async function frSendTestNotification() {
-  const person = localStorage.getItem('frDeviceOwner') || document.getElementById('notifPersonSelect')?.value;
-  if (!person) { alert('먼저 이 기기의 담당자를 선택하고 알림을 켜주세요.'); return; }
-  try {
-    await callSendTestNotification({ person });
-    alert('테스트 알림을 보냈습니다. 몇 초 안에 뜨는지 확인해주세요. (홈 화면에 추가해서 연 상태가 아니면 iPhone에서는 안 보일 수 있습니다)');
-  } catch (err) {
-    alert('테스트 알림 발송 실패: ' + err.message);
-  }
-}
-window.frSendTestNotification = frSendTestNotification;
 
 async function frClearAll() {
   if (!confirm('모든 배정 기록과 부재 계획이 삭제됩니다.\n팀원 이름은 유지됩니다. 계속하시겠습니까?')) return;
@@ -937,36 +880,7 @@ window.finishOnboarding = finishOnboarding;
 setupCalendarDrag();
 setupExtraSeatsDrag();
 
-// ══ Service worker 등록 (PWA 설치 + FCM 백그라운드 수신용) ═══════════════════
+// ══ Service worker 등록 (PWA 설치용 앱 셸 캐싱) ═══════════════════════════════
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/firebase-messaging-sw.js').catch((err) => console.error('SW 등록 실패:', err));
 }
-
-// ══ 알림 토큰 조용한 자동 갱신 ════════════════════════════════════════════════
-// iOS Safari PWA는 앱이 백그라운드에 있는 동안 FCM 토큰을 갱신할 방법이 없고,
-// 포그라운드로 돌아왔을 때만 갱신된다는 게 알려진 한계다 (firebase-js-sdk #8013 등).
-// 그래서 이미 알림을 켠 기기라면, 앱을 열거나 다시 포그라운드로 돌아올 때마다
-// 매번 조용히(알림창 없이) 토큰을 다시 등록해서 07:30 발송 시점에 최대한 최신 토큰이 저장되어 있도록 한다.
-let lastTokenRefreshAt = 0;
-async function silentlyRefreshNotificationToken() {
-  const person = localStorage.getItem('frDeviceOwner');
-  if (!person || !localStorage.getItem('frNotifRegistered')) return;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  const now = Date.now();
-  if (now - lastTokenRefreshAt < 5 * 60 * 1000) return; // 5분 이내 중복 시도 방지
-  lastTokenRefreshAt = now;
-  try {
-    const { getMessaging, getToken, isSupported } = await import('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging.js');
-    if (!(await isSupported())) return;
-    const registration = await navigator.serviceWorker.ready;
-    const messaging = getMessaging(app);
-    const token = await getToken(messaging, { vapidKey: window.FIREBASE_VAPID_KEY, serviceWorkerRegistration: registration });
-    if (token) await callRegisterToken({ person, token });
-  } catch (err) {
-    console.error('알림 토큰 자동 갱신 실패:', err.message);
-  }
-}
-silentlyRefreshNotificationToken();
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') silentlyRefreshNotificationToken();
-});

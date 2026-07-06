@@ -1,21 +1,5 @@
-// PWA의 메인 서비스워커. 앱 셸 캐싱(설치 가능하게) + FCM 백그라운드 푸시 수신을 겸한다.
-importScripts('https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js');
-importScripts('/js/firebase-config.js');
-
-firebase.initializeApp(FIREBASE_CONFIG);
-const messaging = firebase.messaging();
-
-messaging.onBackgroundMessage((payload) => {
-  const { title, body } = payload.notification || {};
-  self.registration.showNotification(title || '🪑 포커스룸', {
-    body: body || '',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-  });
-});
-
-const SHELL_CACHE = 'focus-room-shell-v5';
+// PWA의 메인 서비스워커. 앱 셸 캐싱(설치 가능하게) 담당.
+const SHELL_CACHE = 'focus-room-shell-v6';
 const SHELL_FILES = [
   '/',
   '/manifest.json',
