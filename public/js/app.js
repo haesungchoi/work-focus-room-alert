@@ -93,6 +93,13 @@ function fmtDate(s) {
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${DAYS_KR[d.getDay()]})`;
 }
 
+// 'YYYY-MM-DD' → 해당 분기 키('2026-Q3')와 한글 라벨('2026년 3분기')
+function quarterOf(dateStr) {
+  const [y, m] = dateStr.split('-').map(Number);
+  const q = Math.floor((m - 1) / 3) + 1;
+  return { key: `${y}-Q${q}`, label: `${y}년 ${q}분기` };
+}
+
 function absencePlanFor(dateStr) { return state.absencePlan[dateStr] || []; }
 function isHolidayFor(dateStr) { return !!state.holidays[dateStr]; }
 function extraSeatsFor(dateStr) { return state.extraSeats[dateStr] || 0; }
@@ -513,14 +520,66 @@ window.calPrev = calPrev;
 window.calNext = calNext;
 
 // ══ Tab: 기록 ════════════════════════════════════════════════════════════════
+// 분기별로 각자 포커스룸에 "새로 들어간" 횟수(연속 사용의 시작일, focusDay===1)를 센다.
+function focusEntryStatsByQuarter() {
+  const byQuarter = {};
+  state.days.forEach((day) => {
+    const { key, label } = quarterOf(day.date);
+    if (!byQuarter[key]) byQuarter[key] = { label, counts: {} };
+    Object.entries(day.focusDay || {}).forEach(([p, fd]) => {
+      if (fd === 1) byQuarter[key].counts[p] = (byQuarter[key].counts[p] || 0) + 1;
+    });
+  });
+  return byQuarter;
+}
+
+function renderFocusStats() {
+  const byQuarter = focusEntryStatsByQuarter();
+  const keys = Object.keys(byQuarter).sort().reverse();
+  if (!keys.length) return '';
+
+  const sections = keys.map((key) => {
+    const { label, counts } = byQuarter[key];
+    const values = state.people.map((p) => counts[p] || 0);
+    const max = Math.max(1, ...values);
+    const spread = Math.max(...values) - Math.min(...values);
+    const balanced = spread <= 1;
+    const rows = state.people.map((p, i) => {
+      const v = counts[p] || 0;
+      const pct = Math.round((v / max) * 100);
+      return `
+        <div class="focus-stat-row">
+          <div class="focus-stat-name">
+            <span class="person-avatar" style="background:${P_COLORS[i]};width:20px;height:20px;font-size:9px">${pInitial(p)}</span>
+            <span>${p}</span>
+          </div>
+          <div class="focus-stat-bar-wrap"><div class="focus-stat-bar" style="width:${pct}%;background:${P_COLORS[i]}"></div></div>
+          <div class="focus-stat-count">${v}회</div>
+        </div>`;
+    }).join('');
+    return `
+      <div class="focus-stat-quarter">
+        <div class="focus-stat-qtitle">${label} <span class="focus-stat-balance ${balanced ? 'ok' : 'warn'}">${balanced ? '균형 잡힘' : `최대 ${spread}회 차이`}</span></div>
+        ${rows}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="sec" style="margin-top:0">🏠 포커스룸 사용 횟수 (분기별)</div>
+    <div class="alert alert-info" style="font-size:11px">분기마다 각자 포커스룸에 새로 들어간 횟수입니다. 숫자가 비슷할수록 공평하게 배분된 것이고, 새 분기가 시작되면 자동으로 항목이 추가됩니다.</div>
+    ${sections}
+    <div class="divider"></div>`;
+}
+
 function renderHistory() {
   const el = document.getElementById('tab-history');
   const sorted = [...state.days].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 21);
+  const statsHtml = renderFocusStats();
   if (!sorted.length) {
-    el.innerHTML = `<div class="empty"><div class="ico">📅</div><p>아직 배정 기록이 없습니다.</p></div>`;
+    el.innerHTML = '<div class="gap16"></div>' + (statsHtml || `<div class="empty"><div class="ico">📅</div><p>아직 배정 기록이 없습니다.</p></div>`);
     return;
   }
-  el.innerHTML = '<div class="gap16"></div>' + sorted.map((day) => `
+  el.innerHTML = '<div class="gap16"></div>' + statsHtml + '<div class="sec" style="margin-top:0">최근 배정 기록</div>' + sorted.map((day) => `
     <div class="history-card">
       <div class="history-date">${fmtDate(day.date)}</div>
       ${state.people.map((p) => {
