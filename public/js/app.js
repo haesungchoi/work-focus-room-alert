@@ -766,10 +766,12 @@ function renderHistory() {
 }
 
 // ══ Tab: 설정 ════════════════════════════════════════════════════════════════
+function isIos() {
+  return /iP(hone|od|ad)/.test(navigator.userAgent);
+}
 function isIosNonStandalone() {
-  const isIos = /iP(hone|od|ad)/.test(navigator.userAgent);
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-  return isIos && !isStandalone;
+  return isIos() && !isStandalone;
 }
 
 function renderSettings() {
@@ -806,7 +808,8 @@ function renderSettings() {
         : `<button class="btn btn-primary" onclick="frEnableNotification()">${notifOn ? '이 기기 알림 다시 등록' : '평일 아침 알림 켜기'}</button>
            ${notifOn ? `<button class="btn btn-secondary" onclick="frSendTestNotification()">지금 테스트 알림 받기</button>` : ''}
            <div class="gap8"></div>
-           <div class="alert alert-info" style="font-size:11px">등록하면 평일 07:30에 그날 배정된 자리를 이 기기로 알려드립니다. 팀원별로 각자 본인 폰에서 등록해야 합니다. 알림이 안 온다면 "지금 테스트 알림 받기"로 즉시 확인해보세요.</div>`}
+           <div class="alert alert-info" style="font-size:11px">등록하면 평일 07:30에 그날 배정된 자리를 이 기기로 알려드립니다. 팀원별로 각자 본인 폰에서 등록해야 합니다. 알림이 안 온다면 "지금 테스트 알림 받기"로 즉시 확인해보세요.</div>
+           ${isIos() ? `<div class="gap8"></div><div class="alert alert-warn" style="font-size:11px">iPhone은 애플/파이어베이스 쪽의 알려진 제약으로, 앱을 오래 안 열면(백그라운드 상태) 알림 토큰이 갱신되지 않아 가끔 못 받을 수 있습니다. 이 앱을 열 때마다 자동으로 토큰을 새로고침하도록 해두었지만, 100% 보장은 아니라서 매일 아침 "오늘" 탭으로 한 번씩 확인하시는 걸 권장드려요.</div>` : ''}`}
     </div>
 
     <div class="divider"></div>
@@ -938,3 +941,32 @@ setupExtraSeatsDrag();
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/firebase-messaging-sw.js').catch((err) => console.error('SW 등록 실패:', err));
 }
+
+// ══ 알림 토큰 조용한 자동 갱신 ════════════════════════════════════════════════
+// iOS Safari PWA는 앱이 백그라운드에 있는 동안 FCM 토큰을 갱신할 방법이 없고,
+// 포그라운드로 돌아왔을 때만 갱신된다는 게 알려진 한계다 (firebase-js-sdk #8013 등).
+// 그래서 이미 알림을 켠 기기라면, 앱을 열거나 다시 포그라운드로 돌아올 때마다
+// 매번 조용히(알림창 없이) 토큰을 다시 등록해서 07:30 발송 시점에 최대한 최신 토큰이 저장되어 있도록 한다.
+let lastTokenRefreshAt = 0;
+async function silentlyRefreshNotificationToken() {
+  const person = localStorage.getItem('frDeviceOwner');
+  if (!person || !localStorage.getItem('frNotifRegistered')) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const now = Date.now();
+  if (now - lastTokenRefreshAt < 5 * 60 * 1000) return; // 5분 이내 중복 시도 방지
+  lastTokenRefreshAt = now;
+  try {
+    const { getMessaging, getToken, isSupported } = await import('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging.js');
+    if (!(await isSupported())) return;
+    const registration = await navigator.serviceWorker.ready;
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, { vapidKey: window.FIREBASE_VAPID_KEY, serviceWorkerRegistration: registration });
+    if (token) await callRegisterToken({ person, token });
+  } catch (err) {
+    console.error('알림 토큰 자동 갱신 실패:', err.message);
+  }
+}
+silentlyRefreshNotificationToken();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') silentlyRefreshNotificationToken();
+});
