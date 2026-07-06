@@ -11,10 +11,15 @@
   <meta property="og:type" content="website">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#3E6AE1">
+  <link rel="icon" href="/icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="포커스룸">
+  <!-- SPA 캐치올 리라이트 때문에 이 두 origin에 대한 명시적 preconnect가 없으면 첫 로드 때
+       Firebase SDK/Firestore 커넥션이 DNS+TLS 핸드셰이크를 나중에야 시작하게 된다. -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com">
   <style>
     /* Tesla DESIGN.md 참고: 단일 액센트(Electric Blue) + 그림자/그라디언트/장식 없음 +
        카드 구분은 테두리 대신 면(surface-alt) 톤 차이로, 4px 버튼/12px 카드의 절제된 radius 스케일.

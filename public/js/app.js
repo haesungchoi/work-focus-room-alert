@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js';
 import { getFirestore, doc, collection, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-functions.js';
-import { getMessaging, getToken, isSupported as messagingIsSupported } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging.js';
+// firebase-messaging은 알림을 실제로 켤 때만 동적 import — 대부분의 방문에서는 안 쓰는 SDK라 초기 로드에서 뺀다.
 
 // firebase-config.js (classic <script>, loaded before this module) provides window.FIREBASE_CONFIG / FIREBASE_VAPID_KEY
 // assign.js (classic <script>, loaded before this module) provides window.FocusAssign
@@ -830,7 +830,8 @@ async function frEnableNotification() {
   const person = document.getElementById('notifPersonSelect')?.value;
   if (!person) { alert('이 기기가 누구의 것인지 먼저 선택해주세요.'); return; }
   try {
-    const supported = await messagingIsSupported();
+    const { getMessaging, getToken, isSupported } = await import('https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging.js');
+    const supported = await isSupported();
     if (!supported) { alert('이 브라우저는 푸시 알림을 지원하지 않습니다.'); return; }
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') { alert('알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.'); return; }
