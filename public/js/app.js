@@ -21,6 +21,7 @@ const callResetDay = httpsCallable(functionsClient, 'resetDay');
 const callResetAllData = httpsCallable(functionsClient, 'resetAllData');
 const callSavePeople = httpsCallable(functionsClient, 'savePeople');
 const callRegisterToken = httpsCallable(functionsClient, 'registerToken');
+const callSendTestNotification = httpsCallable(functionsClient, 'sendTestNotification');
 
 // ══ Constants ════════════════════════════════════════════════════════════════
 const ICONS = { '포룸 S7': '🏠', '포룸 S8': '🏠', S45: '💼', S42: '💼', S27: '💼' };
@@ -803,8 +804,9 @@ function renderSettings() {
       ${isIosNonStandalone()
         ? `<div class="alert alert-warn">iPhone은 이 페이지를 <b>공유 → 홈 화면에 추가</b>로 설치한 뒤, 설치된 앱 아이콘으로 열어야 알림을 받을 수 있습니다.</div>`
         : `<button class="btn btn-primary" onclick="frEnableNotification()">${notifOn ? '이 기기 알림 다시 등록' : '평일 아침 알림 켜기'}</button>
+           ${notifOn ? `<button class="btn btn-secondary" onclick="frSendTestNotification()">지금 테스트 알림 받기</button>` : ''}
            <div class="gap8"></div>
-           <div class="alert alert-info" style="font-size:11px">등록하면 평일 07:30에 그날 배정된 자리를 이 기기로 알려드립니다. 팀원별로 각자 본인 폰에서 등록해야 합니다.</div>`}
+           <div class="alert alert-info" style="font-size:11px">등록하면 평일 07:30에 그날 배정된 자리를 이 기기로 알려드립니다. 팀원별로 각자 본인 폰에서 등록해야 합니다. 알림이 안 온다면 "지금 테스트 알림 받기"로 즉시 확인해보세요.</div>`}
     </div>
 
     <div class="divider"></div>
@@ -847,6 +849,18 @@ async function frEnableNotification() {
   }
 }
 window.frEnableNotification = frEnableNotification;
+
+async function frSendTestNotification() {
+  const person = localStorage.getItem('frDeviceOwner') || document.getElementById('notifPersonSelect')?.value;
+  if (!person) { alert('먼저 이 기기의 담당자를 선택하고 알림을 켜주세요.'); return; }
+  try {
+    await callSendTestNotification({ person });
+    alert('테스트 알림을 보냈습니다. 몇 초 안에 뜨는지 확인해주세요. (홈 화면에 추가해서 연 상태가 아니면 iPhone에서는 안 보일 수 있습니다)');
+  } catch (err) {
+    alert('테스트 알림 발송 실패: ' + err.message);
+  }
+}
+window.frSendTestNotification = frSendTestNotification;
 
 async function frClearAll() {
   if (!confirm('모든 배정 기록과 부재 계획이 삭제됩니다.\n팀원 이름은 유지됩니다. 계속하시겠습니까?')) return;
