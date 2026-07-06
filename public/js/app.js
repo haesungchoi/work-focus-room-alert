@@ -5,7 +5,7 @@ import { getMessaging, getToken, isSupported as messagingIsSupported } from 'htt
 
 // firebase-config.js (classic <script>, loaded before this module) provides window.FIREBASE_CONFIG / FIREBASE_VAPID_KEY
 // assign.js (classic <script>, loaded before this module) provides window.FocusAssign
-const { generate, projectRange, offsetDate, toDateStr, isWeekend, FOCUS_SEATS, EXTERNAL_SEATS, ALL_SEATS } = window.FocusAssign;
+const { projectRange, offsetDate, toDateStr, isWeekend, buildExternalSeats, FOCUS_SEATS } = window.FocusAssign;
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const db = getFirestore(app);
@@ -14,6 +14,7 @@ const functionsClient = getFunctions(app, 'asia-northeast3');
 const callSetAbsence = httpsCallable(functionsClient, 'setAbsence');
 const callSetAbsenceRange = httpsCallable(functionsClient, 'setAbsenceRange');
 const callSetHolidayRange = httpsCallable(functionsClient, 'setHolidayRange');
+const callSetExtraSeats = httpsCallable(functionsClient, 'setExtraSeats');
 const callGenerateDay = httpsCallable(functionsClient, 'generateDay');
 const callResetDay = httpsCallable(functionsClient, 'resetDay');
 const callResetAllData = httpsCallable(functionsClient, 'resetAllData');
@@ -28,10 +29,10 @@ const P_COLORS = ['#7c3aed', '#2563eb', '#059669', '#d97706', '#dc2626'];
 const DEFAULT_PEOPLE = ['멤버1', '멤버2', '멤버3', '멤버4', '멤버5'];
 
 // ══ Reactive state (Firestore가 진실 공급원, 여기는 화면용 미러) ═══════════════
-const state = { people: DEFAULT_PEOPLE, absencePlan: {}, days: [], holidays: {} };
+const state = { people: DEFAULT_PEOPLE, absencePlan: {}, days: [], holidays: {}, extraSeats: {} };
 let configDocExists = false;
 let bootedCount = 0;
-const BOOT_TARGET = 4;
+const BOOT_TARGET = 5;
 
 function onBootPiece() {
   bootedCount++;
@@ -71,6 +72,14 @@ onSnapshot(collection(db, 'holidays'), (snap) => {
   onBootPiece();
 });
 
+onSnapshot(collection(db, 'extraSeats'), (snap) => {
+  const m = {};
+  snap.forEach((d) => (m[d.id] = d.data().count || 0));
+  state.extraSeats = m;
+  renderAll();
+  onBootPiece();
+});
+
 function pColor(person) {
   const i = state.people.indexOf(person);
   return P_COLORS[i] ?? '#9ca3af';
@@ -86,6 +95,7 @@ function fmtDate(s) {
 
 function absencePlanFor(dateStr) { return state.absencePlan[dateStr] || []; }
 function isHolidayFor(dateStr) { return !!state.holidays[dateStr]; }
+function extraSeatsFor(dateStr) { return state.extraSeats[dateStr] || 0; }
 
 function seatType(s) {
   if (!s) return 'absent';
@@ -98,19 +108,20 @@ function findRecord(dateStr) { return state.days.find((d) => d.date === dateStr)
 function assignmentFor(dateStr) {
   const rec = findRecord(dateStr);
   if (rec) return { ...rec, projected: false };
-  const projected = projectRange(state.people, state.days, dateStr, dateStr, absencePlanFor, isHolidayFor);
+  const projected = projectRange(state.people, state.days, dateStr, dateStr, absencePlanFor, isHolidayFor, extraSeatsFor);
   return projected[0];
 }
 
 // ══ Cards ════════════════════════════════════════════════════════════════════
-function renderCards(assignments, focusDay) {
-  return ALL_SEATS.map((seat) => {
+function renderCards(assignments, focusDay, extraCount = 0) {
+  const seats = [...FOCUS_SEATS, ...buildExternalSeats(extraCount)];
+  return seats.map((seat) => {
     const person = Object.entries(assignments || {}).find(([, s]) => s === seat)?.[0];
     const type = seatType(seat);
     const isFocus = FOCUS_SEATS.includes(seat);
     const dn = person && focusDay?.[person];
     return `<div class="seat-card ${type}">
-      <div class="seat-icon">${ICONS[seat]}</div>
+      <div class="seat-icon">${ICONS[seat] || (isFocus ? '🏠' : '💼')}</div>
       <div>
         <div class="seat-lbl">${seat} · ${isFocus ? '포커스룸 내부' : '외부 좌석'}</div>
         <div class="person-name">${person || '—'}</div>
@@ -165,7 +176,7 @@ function renderToday() {
   el.innerHTML = `
     <div class="gap16"></div>
     <div class="sec">${fmtDate(today)} 자리 배정</div>
-    ${renderCards(rec.assignments, rec.focusDay)}
+    ${renderCards(rec.assignments, rec.focusDay, rec.extraExternalCount)}
     ${absences.length ? `<div class="sec">부재</div>${absences.map((p) => `
       <div class="seat-card absent">
         <div class="seat-icon" style="background:#f3f4f6">✈️</div>
@@ -204,7 +215,7 @@ function renderTomorrow() {
     <div class="sec">내일 부재 인원 <span style="font-weight:400;text-transform:none">(활성화 = 부재)</span></div>
     ${absentToggles(tom, planned)}
     <div class="sec">${existing ? '확정 배정' : '예상 배정'}</div>
-    ${renderCards(preview.assignments, preview.focusDay)}
+    ${renderCards(preview.assignments, preview.focusDay, preview.extraExternalCount)}
     <div class="gap8"></div>
     ${!existing
       ? `<button class="btn btn-primary" onclick="frGenerateDay('${tom}')">내일 배정 확정</button>`
@@ -272,7 +283,7 @@ function renderCalendar() {
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
   const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
-  const projectedMonth = projectRange(state.people, state.days, monthStart, monthEnd, absencePlanFor, isHolidayFor);
+  const projectedMonth = projectRange(state.people, state.days, monthStart, monthEnd, absencePlanFor, isHolidayFor, extraSeatsFor);
   const byDate = Object.fromEntries(projectedMonth.map((r) => [r.date, r]));
 
   const calPerson = getCalPerson();
@@ -414,6 +425,16 @@ async function frRemoveHoliday(dateStr) {
 }
 window.frRemoveHoliday = frRemoveHoliday;
 
+async function frAdjustExtraSeats(dateStr, delta) {
+  const next = Math.max(0, Math.min(5, extraSeatsFor(dateStr) + delta));
+  try {
+    await callSetExtraSeats({ date: dateStr, count: next });
+  } catch (err) {
+    alert('추가 좌석 설정에 실패했습니다: ' + err.message);
+  }
+}
+window.frAdjustExtraSeats = frAdjustExtraSeats;
+
 function renderDayPanel(dateStr) {
   const weekend = isWeekend(dateStr);
   const holiday = isHolidayFor(dateStr);
@@ -431,6 +452,15 @@ function renderDayPanel(dateStr) {
   const today = todayStr();
   const isFuture = dateStr >= today;
   const preview = rec ? null : assignmentFor(dateStr);
+  const extraCount = extraSeatsFor(dateStr);
+
+  const extraSeatsSection = `
+    <div class="sec" style="margin-top:0">추가 외부 좌석 <span style="font-weight:400;text-transform:none">(다른 팀 자리 여유가 생긴 날 등)</span></div>
+    <div class="extra-seats-row">
+      <button class="cal-nav-btn" onclick="frAdjustExtraSeats('${dateStr}',-1)">−</button>
+      <span class="extra-seats-count">${extraCount === 0 ? '기본 3자리' : `+${extraCount} (총 ${3 + extraCount}자리)`}</span>
+      <button class="cal-nav-btn" onclick="frAdjustExtraSeats('${dateStr}',1)">+</button>
+    </div>`;
 
   const toggleRows = state.people.map((p) => `
     <div class="day-panel-person">
@@ -465,7 +495,8 @@ function renderDayPanel(dateStr) {
   return `
     <div class="day-panel">
       <div class="day-panel-title">📅 ${fmtDate(dateStr)}</div>
-      <div class="sec" style="margin-top:0">부재 계획 <span style="font-weight:400;text-transform:none">(활성화 = 부재 예정)</span></div>
+      ${extraSeatsSection}
+      <div class="sec">부재 계획 <span style="font-weight:400;text-transform:none">(활성화 = 부재 예정)</span></div>
       ${toggleRows}
       ${assignSection}
     </div>`;

@@ -40,6 +40,11 @@ async function isHoliday(date) {
   return snap.exists;
 }
 
+async function getExtraSeats(date) {
+  const snap = await db.collection('extraSeats').doc(date).get();
+  return snap.exists ? snap.data().count || 0 : 0;
+}
+
 // 범위(startDate~endDate, 양끝 포함)에서 주말을 제외한 날짜 배열을 만든다.
 function workdayRange(startDate, endDate) {
   const dates = [];
@@ -56,12 +61,14 @@ async function computeAndSaveDay(targetDate, absentOverride) {
   const people = await getPeople();
   const days = await getAllDays();
   const absent = absentOverride ?? (await getAbsencePlan(targetDate));
-  const { assignments, focusDay } = assign.generate(people, days, targetDate, absent);
+  const extraExternalCount = await getExtraSeats(targetDate);
+  const { assignments, focusDay } = assign.generate(people, days, targetDate, absent, extraExternalCount);
   const record = {
     date: targetDate,
     absent,
     assignments,
     focusDay,
+    extraExternalCount,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
   await db.collection('days').doc(targetDate).set(record);
@@ -132,6 +139,18 @@ exports.setHolidayRange = onCall(async (req) => {
   return { ok: true, count: dates.length };
 });
 
+// ── Callable: 특정 날짜의 임시 추가 외부좌석 개수 설정 (다른 팀 자리가 비어 여유가 생긴 날 등) ─
+exports.setExtraSeats = onCall(async (req) => {
+  const { date, count } = req.data || {};
+  if (!date || typeof count !== 'number' || count < 0) {
+    throw new HttpsError('invalid-argument', 'date, count(0 이상 숫자)가 필요합니다.');
+  }
+  const ref = db.collection('extraSeats').doc(date);
+  if (count === 0) await ref.delete();
+  else await ref.set({ count });
+  return { ok: true };
+});
+
 // ── Callable: 특정 날짜 배정 생성/재생성 ─────────────────────────────────
 exports.generateDay = onCall(async (req) => {
   const { date, absent } = req.data || {};
@@ -155,7 +174,7 @@ exports.resetAllData = onCall(async () => {
     snap.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
   };
-  await Promise.all([batchDelete('days'), batchDelete('absencePlan')]);
+  await Promise.all([batchDelete('days'), batchDelete('absencePlan'), batchDelete('holidays'), batchDelete('extraSeats')]);
   return { ok: true };
 });
 

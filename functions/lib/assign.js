@@ -32,6 +32,13 @@
     return dow === 0 || dow === 6;
   }
 
+  // 기본 외부 좌석(외부1~3)에 그날그날 임시로 늘어난 자리(외부4, 외부5, ...)를 덧붙인다.
+  function buildExternalSeats(extraCount = 0) {
+    if (!extraCount) return EXTERNAL_SEATS;
+    const extra = Array.from({ length: extraCount }, (_, i) => `외부${EXTERNAL_SEATS.length + i + 1}`);
+    return [...EXTERNAL_SEATS, ...extra];
+  }
+
   // days: [{ date, absent:[...], assignments:{person:seat|null}, focusDay:{person:n} }, ...] (date 오름차순)
   function focusCount(days, beforeDate) {
     const c = {};
@@ -57,7 +64,9 @@
   // days: 지금까지의 배정 기록 (date 오름차순, targetDate 이전 기록만 사용)
   // targetDate: 'YYYY-MM-DD'
   // absent: 해당 날짜에 부재인 사람 이름 배열
-  function generate(people, days, targetDate, absent = []) {
+  // extraExternalCount: 그날 임시로 늘어난 외부 좌석 개수 (기본 0)
+  function generate(people, days, targetDate, absent = [], extraExternalCount = 0) {
+    const externalSeats = buildExternalSeats(extraExternalCount);
     const present = people.filter((p) => !absent.includes(p));
     const assignments = {};
     const focusDay = {};
@@ -77,7 +86,7 @@
           taken.add(seat);
         }
       });
-      EXTERNAL_SEATS.forEach((seat, i) => {
+      externalSeats.forEach((seat, i) => {
         const p = present[i + FOCUS_SEATS.length];
         if (p !== undefined) {
           assignments[p] = seat;
@@ -128,12 +137,27 @@
       }
     });
 
-    const needExt = needAssign.filter((p) => !gotFocus.includes(p));
-    const freeExt = EXTERNAL_SEATS.filter((s) => !taken.has(s));
+    // 포커스룸에서 나가는 사람은, 오늘 새로 들어가는 사람이 "어제" 앉아있던 외부자리를 그대로 물려받는다(스왑).
+    // 이렇게 하면 원래 외부자리에 있던 다른 사람들은 전혀 건드리지 않고 그대로 유지된다 — 포커스룸 로테이션 때문에
+    // 안정적으로 잘 앉아있던 외부자리 사람들의 자리가 불필요하게 바뀌는 것을 막는다.
+    const leaveFocusQueue = [...leaveFocus];
+    gotFocus.forEach((enteringPerson) => {
+      if (leaveFocusQueue.length === 0) return;
+      const prevSeat = prevRec.assignments?.[enteringPerson];
+      if (prevSeat && externalSeats.includes(prevSeat) && !taken.has(prevSeat)) {
+        const outgoingPerson = leaveFocusQueue.shift();
+        assignments[outgoingPerson] = prevSeat;
+        taken.add(prevSeat);
+      }
+    });
+
+    // 아직 자리를 못 받은 사람들 — 대부분은 원래 외부자리에 계속 있던 사람들이라, 자기 자리를 그대로 유지시켜준다.
+    const stillNeed = present.filter((p) => assignments[p] === undefined);
+    const freeExt = externalSeats.filter((s) => !taken.has(s));
     const unplaced = [];
-    needExt.forEach((p) => {
+    stillNeed.forEach((p) => {
       const prev = prevRec.assignments?.[p];
-      if (prev && EXTERNAL_SEATS.includes(prev) && freeExt.includes(prev)) {
+      if (prev && externalSeats.includes(prev) && freeExt.includes(prev)) {
         assignments[p] = prev;
         freeExt.splice(freeExt.indexOf(prev), 1);
       } else {
@@ -146,7 +170,7 @@
         const d = days[i];
         if (d.date >= targetDate) continue;
         const s = d.assignments?.[p];
-        if (s && EXTERNAL_SEATS.includes(s) && freeExt.includes(s)) {
+        if (s && externalSeats.includes(s) && freeExt.includes(s)) {
           best = s;
           break;
         }
@@ -164,7 +188,8 @@
   // 이미 확정된 기록(days)에 없는 미래 날짜들을 순서대로 이어서 시뮬레이션 (달력 예측용)
   // absencePlanFor(dateStr) => 그 날짜의 부재자 배열을 반환하는 함수
   // isHolidayFor(dateStr) => 그 날짜가 회사 휴무일(연휴 등)인지 반환하는 함수 (생략 가능)
-  function projectRange(people, days, fromDate, toDate, absencePlanFor, isHolidayFor) {
+  // extraSeatsFor(dateStr) => 그 날짜의 임시 추가 외부좌석 개수를 반환하는 함수 (생략 가능)
+  function projectRange(people, days, fromDate, toDate, absencePlanFor, isHolidayFor, extraSeatsFor) {
     const timeline = [...days].sort((a, b) => a.date.localeCompare(b.date));
     const projected = [];
     let cursor = fromDate;
@@ -178,8 +203,9 @@
         projected.push({ date: cursor, offDay: true, weekend: isWeekend(cursor), assignments: {}, focusDay: {}, absent: [] });
       } else {
         const absent = absencePlanFor(cursor) || [];
-        const { assignments, focusDay } = generate(people, timeline, cursor, absent);
-        const rec = { date: cursor, absent, assignments, focusDay, offDay: false };
+        const extraExternalCount = (extraSeatsFor && extraSeatsFor(cursor)) || 0;
+        const { assignments, focusDay } = generate(people, timeline, cursor, absent, extraExternalCount);
+        const rec = { date: cursor, absent, assignments, focusDay, offDay: false, extraExternalCount };
         timeline.push(rec); // 다음 근무일 예측이 이어서 참조할 수 있도록 누적
         projected.push({ ...rec, projected: true });
       }
@@ -195,6 +221,7 @@
     toDateStr,
     offsetDate,
     isWeekend,
+    buildExternalSeats,
     focusCount,
     lastFocusDate,
     generate,

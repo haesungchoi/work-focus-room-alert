@@ -20,6 +20,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+    match /extraSeats/{date} {
+      allow read: if true;
+      allow write: if false;
+    }
     match /tokens/{person} {
       // 토큰 자체는 남에게 보일 필요 없는 정보라 읽기도 막는다.
       allow read: if false;
