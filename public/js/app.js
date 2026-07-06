@@ -15,6 +15,7 @@ const callSetAbsence = httpsCallable(functionsClient, 'setAbsence');
 const callSetAbsenceRange = httpsCallable(functionsClient, 'setAbsenceRange');
 const callSetHolidayRange = httpsCallable(functionsClient, 'setHolidayRange');
 const callSetExtraSeats = httpsCallable(functionsClient, 'setExtraSeats');
+const callSetExtraSeatsRange = httpsCallable(functionsClient, 'setExtraSeatsRange');
 const callGenerateDay = httpsCallable(functionsClient, 'generateDay');
 const callResetDay = httpsCallable(functionsClient, 'resetDay');
 const callResetAllData = httpsCallable(functionsClient, 'resetAllData');
@@ -236,12 +237,11 @@ let calMonth = new Date().getMonth();
 let selectedDate = null;
 let rangeSelection = null; // { start, end, active } — 여러 날짜를 드래그로 선택해 한 번에 부재/휴무일 등록할 때 사용
 
-function rangeMinMax() {
-  if (!rangeSelection) return null;
-  return rangeSelection.start <= rangeSelection.end
-    ? { min: rangeSelection.start, max: rangeSelection.end }
-    : { min: rangeSelection.end, max: rangeSelection.start };
+function minMaxOf(sel) {
+  if (!sel) return null;
+  return sel.start <= sel.end ? { min: sel.start, max: sel.end } : { min: sel.end, max: sel.start };
 }
+function rangeMinMax() { return minMaxOf(rangeSelection); }
 
 // #tab-calendar는 renderCalendar()가 innerHTML만 갈아끼우고 엘리먼트 자체는 그대로라,
 // 리스너를 한 번만 붙여두면 매 렌더링 후에도 계속 살아있다 (이벤트 위임 방식).
@@ -515,10 +515,179 @@ function selectCalDay(dateStr) {
   renderCalendar();
 }
 window.selectCalDay = selectCalDay;
-function calPrev() { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } selectedDate = null; renderCalendar(); }
-function calNext() { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } selectedDate = null; renderCalendar(); }
+// 캘린더/추가석 탭이 월 이동 상태(calYear/calMonth)를 공유하므로, 현재 보이는 탭을 다시 그린다.
+function resetCalSelections() {
+  selectedDate = null; rangeSelection = null;
+  extraSelectedDate = null; extraRangeSelection = null;
+}
+function calPrev() { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } resetCalSelections(); RENDERERS[activeTab]?.(); }
+function calNext() { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } resetCalSelections(); RENDERERS[activeTab]?.(); }
 window.calPrev = calPrev;
 window.calNext = calNext;
+
+// ══ Tab: 추가석 (기간 드래그로 임시 추가 외부좌석 한 번에 등록) ══════════════════
+let extraSelectedDate = null;
+let extraRangeSelection = null;
+let extraRangeCount = 0; // 범위 적용 패널에서 조정 중인 값 (드래그 시작 시 그 날짜의 현재 값으로 초기화)
+
+function setupExtraSeatsDrag() {
+  const container = document.getElementById('tab-extraseats');
+  container.addEventListener('pointerdown', (e) => {
+    const cell = e.target.closest('.cal-cell[data-date]');
+    if (!cell) return;
+    extraRangeSelection = { start: cell.dataset.date, end: cell.dataset.date, active: true };
+    extraRangeCount = extraSeatsFor(cell.dataset.date);
+    extraSelectedDate = null;
+    renderExtraSeatsTab();
+  });
+  container.addEventListener('pointermove', (e) => {
+    if (!extraRangeSelection?.active) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const cell = el?.closest('.cal-cell[data-date]');
+    if (!cell || cell.dataset.date === extraRangeSelection.end) return;
+    extraRangeSelection.end = cell.dataset.date;
+    renderExtraSeatsTab();
+  });
+  window.addEventListener('pointerup', () => {
+    if (!extraRangeSelection?.active) return;
+    extraRangeSelection.active = false;
+    if (extraRangeSelection.start === extraRangeSelection.end) {
+      const d = extraRangeSelection.start;
+      extraRangeSelection = null;
+      selectExtraDay(d);
+    } else {
+      renderExtraSeatsTab();
+    }
+  });
+}
+
+function selectExtraDay(dateStr) {
+  extraSelectedDate = extraSelectedDate === dateStr ? null : dateStr;
+  renderExtraSeatsTab();
+}
+window.selectExtraDay = selectExtraDay;
+
+function renderExtraSeatsTab() {
+  const el = document.getElementById('tab-extraseats');
+  const today = todayStr();
+  const firstDow = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const range = minMaxOf(extraRangeSelection);
+
+  let cells = '';
+  for (let i = 0; i < firstDow; i++) cells += '<div class="cal-cell empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const mm = String(calMonth + 1).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    const dateStr = `${calYear}-${mm}-${dd}`;
+    const dow = new Date(dateStr + 'T00:00:00').getDay();
+    const isToday = dateStr === today;
+    const isPast = dateStr < today;
+    const isSel = dateStr === extraSelectedDate;
+    const isSun = dow === 0, isSat = dow === 6;
+    const weekend = isSun || isSat;
+    const holiday = isHolidayFor(dateStr);
+    const offDay = weekend || holiday;
+    const inRange = !!range && dateStr >= range.min && dateStr <= range.max;
+    const count = extraSeatsFor(dateStr);
+
+    let inner;
+    if (offDay) {
+      inner = `<div class="cal-num">${d}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">${holiday ? '🎌' : '휴무'}</div>`;
+    } else {
+      inner = `<div class="cal-num">${d}</div>${count > 0 ? `<div style="font-size:10px;font-weight:500;color:var(--accent)">+${count}</div>` : '<div style="height:12px"></div>'}`;
+    }
+
+    cells += `
+      <div class="cal-cell${offDay ? ' offday' : ''}${holiday ? ' holiday' : ''}${weekend ? ' weekend' : ''}${isToday ? ' today' : ''}${isPast ? ' past' : ''}${isSel ? ' selected' : ''}${inRange ? ' range-selected' : ''}${isSun ? ' sun' : ''}${isSat ? ' sat' : ''}${count > 0 && !offDay ? ' pext' : ''}"
+           data-date="${dateStr}">
+        ${inner}
+      </div>`;
+  }
+
+  const panelHtml = extraRangeSelection ? renderExtraRangePanel() : (extraSelectedDate ? renderExtraDayPanel(extraSelectedDate) : '');
+
+  el.innerHTML = `
+    <div class="gap16"></div>
+    <div class="alert alert-info" style="font-size:11px">다른 팀 자리가 남아 추가 외부 좌석이 생긴 날짜를 드래그로 선택하면 기간 전체에 한 번에 등록할 수 있어요.</div>
+    <div class="cal-header">
+      <button class="cal-nav-btn" onclick="calPrev()">‹</button>
+      <div class="cal-title">${calYear}년 ${MONTHS_KR[calMonth]}</div>
+      <button class="cal-nav-btn" onclick="calNext()">›</button>
+    </div>
+    <div class="cal-weekdays">${DAYS_KR.map((d) => `<div class="cal-wd">${d}</div>`).join('')}</div>
+    <div class="cal-grid">${cells}</div>
+    <div style="margin-top:4px;font-size:10px;color:var(--muted);padding:0 2px">파란 숫자 = 그날 추가된 외부 좌석 수 · 날짜를 드래그하면 기간을 한 번에 등록할 수 있어요</div>
+    ${panelHtml}`;
+}
+
+function renderExtraDayPanel(dateStr) {
+  const weekend = isWeekend(dateStr);
+  const holiday = isHolidayFor(dateStr);
+  if (weekend || holiday) {
+    return `
+      <div class="day-panel">
+        <div class="day-panel-title">📅 ${fmtDate(dateStr)}</div>
+        <div class="alert alert-info">${weekend ? '주말은 근무일이 아니라 좌석을 배정하지 않습니다.' : '🎌 회사 휴무일로 등록된 날짜라 좌석을 배정하지 않습니다.'}</div>
+      </div>`;
+  }
+  const extraCount = extraSeatsFor(dateStr);
+  return `
+    <div class="day-panel">
+      <div class="day-panel-title">📅 ${fmtDate(dateStr)}</div>
+      <div class="extra-seats-row">
+        <button class="cal-nav-btn" onclick="frAdjustExtraSeats('${dateStr}',-1)">−</button>
+        <span class="extra-seats-count">${extraCount === 0 ? '기본 3자리' : `+${extraCount} (총 ${3 + extraCount}자리)`}</span>
+        <button class="cal-nav-btn" onclick="frAdjustExtraSeats('${dateStr}',1)">+</button>
+      </div>
+    </div>`;
+}
+
+function renderExtraRangePanel() {
+  const { min, max } = minMaxOf(extraRangeSelection);
+  const allDates = [];
+  for (let c = min; c <= max; c = offsetDate(c, 1)) allDates.push(c);
+  const workdays = allDates.filter((d) => !isWeekend(d));
+
+  return `
+    <div class="day-panel">
+      <div class="day-panel-title">🖐️ 선택한 기간: ${fmtDate(min)} ~ ${fmtDate(max)}</div>
+      <div class="alert alert-info" style="font-size:11px">평일 ${workdays.length}일 선택됨 (주말 ${allDates.length - workdays.length}일은 자동 제외)</div>
+      <div class="gap8"></div>
+      <div class="extra-seats-row">
+        <button class="cal-nav-btn" onclick="frAdjustExtraRangeCount(-1)">−</button>
+        <span class="extra-seats-count">${extraRangeCount === 0 ? '기본 3자리' : `+${extraRangeCount} (총 ${3 + extraRangeCount}자리)`}</span>
+        <button class="cal-nav-btn" onclick="frAdjustExtraRangeCount(1)">+</button>
+      </div>
+      <button class="btn btn-primary" onclick="frConfirmExtraRange()">이 기간에 적용</button>
+      <button class="btn btn-secondary" onclick="frCancelExtraRange()">취소</button>
+    </div>`;
+}
+
+function frAdjustExtraRangeCount(delta) {
+  extraRangeCount = Math.max(0, Math.min(5, extraRangeCount + delta));
+  renderExtraSeatsTab();
+}
+window.frAdjustExtraRangeCount = frAdjustExtraRangeCount;
+
+async function frConfirmExtraRange() {
+  const range = minMaxOf(extraRangeSelection);
+  if (!range) return;
+  try {
+    await callSetExtraSeatsRange({ startDate: range.min, endDate: range.max, count: extraRangeCount });
+    extraRangeSelection = null;
+    renderExtraSeatsTab();
+  } catch (err) {
+    alert('추가 좌석 등록에 실패했습니다: ' + err.message);
+  }
+}
+window.frConfirmExtraRange = frConfirmExtraRange;
+
+function frCancelExtraRange() {
+  extraRangeSelection = null;
+  renderExtraSeatsTab();
+}
+window.frCancelExtraRange = frCancelExtraRange;
 
 // ══ Tab: 기록 ════════════════════════════════════════════════════════════════
 // 분기별로 각자 포커스룸에 "새로 들어간" 횟수(연속 사용의 시작일, focusDay===1)를 센다.
@@ -692,7 +861,7 @@ async function frClearAll() {
 window.frClearAll = frClearAll;
 
 // ══ Navigation ════════════════════════════════════════════════════════════════
-const RENDERERS = { today: renderToday, tomorrow: renderTomorrow, calendar: renderCalendar, history: renderHistory, settings: renderSettings };
+const RENDERERS = { today: renderToday, tomorrow: renderTomorrow, calendar: renderCalendar, extraseats: renderExtraSeatsTab, history: renderHistory, settings: renderSettings };
 let activeTab = 'calendar';
 
 function switchTab(tab, btn) {
@@ -748,6 +917,7 @@ async function finishOnboarding() {
 window.finishOnboarding = finishOnboarding;
 
 setupCalendarDrag();
+setupExtraSeatsDrag();
 
 // ══ Service worker 등록 (PWA 설치 + FCM 백그라운드 수신용) ═══════════════════
 if ('serviceWorker' in navigator) {

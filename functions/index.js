@@ -165,6 +165,24 @@ exports.setExtraSeats = onCall(async (req) => {
   return { ok: true };
 });
 
+// ── Callable: 기간(range) 동안 임시 추가 외부좌석 개수를 한 번에 설정 (캘린더 드래그 선택) ─
+exports.setExtraSeatsRange = onCall(async (req) => {
+  const { startDate, endDate, count } = req.data || {};
+  if (!startDate || !endDate || typeof count !== 'number' || count < 0) {
+    throw new HttpsError('invalid-argument', 'startDate, endDate, count(0 이상 숫자)가 필요합니다.');
+  }
+  const dates = workdayRange(startDate, endDate);
+  const batch = db.batch();
+  dates.forEach((date) => {
+    const ref = db.collection('extraSeats').doc(date);
+    if (count === 0) batch.delete(ref);
+    else batch.set(ref, { count });
+  });
+  await batch.commit();
+  await Promise.all(dates.map(regenerateIfConfirmed));
+  return { ok: true, count: dates.length };
+});
+
 // ── Callable: 특정 날짜 배정 생성/재생성 ─────────────────────────────────
 exports.generateDay = onCall(async (req) => {
   const { date, absent } = req.data || {};
