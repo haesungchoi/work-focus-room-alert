@@ -10,7 +10,7 @@
   <meta property="og:image" content="/domain.jpg">
   <meta property="og:type" content="website">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#3E6AE1">
+  <meta name="theme-color" content="#FF3B77">
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -26,6 +26,8 @@
        단, 5명을 구분하는 아바타/점 색상만은 다인원 도구의 기능적 필요로 예외를 둔다. */
     :root {
       --accent: #3E6AE1; --accent-bg: #EDF2FD;
+      /* 앱 아이콘의 key color. 포커스룸 강조(파랑)와 겹치지 않게, 헤더/내비 같은 "브랜드 쉘" 부분에만 부분적으로 사용 */
+      --brand: #FF3B77; --brand-bg: rgba(255,59,119,0.12);
       --surface: #FFFFFF; --surface-alt: #F4F4F4;
       --line: #EEEEEE; --line-soft: #D0D1D2;
       --text: #171A20; --text-body: #393C41; --muted: #5C5E62; --placeholder: #8E8E8E;
@@ -41,7 +43,12 @@
     /* ── Header ── */
     .header {
       background: var(--surface); border-bottom: 1px solid var(--line);
-      padding: 13px 18px; position: sticky; top: 0; z-index: 20;
+      padding: 11px 18px; position: sticky; top: 0; z-index: 20;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .brand-badge {
+      width: 30px; height: 30px; border-radius: 8px; background: var(--brand);
+      display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0;
     }
     .header h1 { font-size: 16px; font-weight: 500; color: var(--text); }
     .header .hdate { font-size: 11px; color: var(--muted); margin-top: 1px; }
@@ -59,7 +66,7 @@
     }
     .nav-tab .ti { font-size: 15px; line-height: 1; }
     .nav-tab .tl { font-size: 9px; font-weight: 500; margin-top: 2px; }
-    .nav-tab.active { color: var(--accent); background: var(--accent-bg); }
+    .nav-tab.active { color: var(--brand); background: var(--brand-bg); }
 
     /* ── Layout ── */
     .content { padding: 0 15px 36px; max-width: 480px; margin: 0 auto; }
@@ -163,6 +170,7 @@
     .modal {
       background:var(--surface); border-radius:12px; padding:24px 20px; width:100%; max-width:400px;
     }
+    .modal .brand-badge { border-radius:50%; margin-bottom:14px; font-size:17px; }
     .modal h2 { font-size:18px; font-weight:500; margin-bottom:4px; color:var(--text); }
     .modal .modal-sub { font-size:13px; color:var(--muted); margin-bottom:20px; }
 
@@ -253,7 +261,8 @@
 <!-- ── Onboarding overlay ── -->
 <div class="overlay hidden" id="onboarding">
   <div class="modal">
-    <h2>👋 처음 오셨군요!</h2>
+    <span class="brand-badge">👋</span>
+    <h2>처음 오셨군요!</h2>
     <p class="modal-sub">팀원 5명의 이름을 입력해주세요. (한 명이 입력하면 모두에게 공유됩니다)</p>
     <div id="onboardingFields"></div>
     <div class="gap16"></div>
@@ -263,8 +272,11 @@
 
 <!-- ── Header ── -->
 <div class="header">
-  <h1>🪑 포커스룸 자리 배정</h1>
-  <div class="hdate" id="headerDate"></div>
+  <span class="brand-badge">🪑</span>
+  <div>
+    <h1>포커스룸 자리 배정</h1>
+    <div class="hdate" id="headerDate"></div>
+  </div>
 </div>
 
 <!-- ── Nav ── -->
