@@ -6,9 +6,14 @@
     root.FocusAssign = factory();
   }
 })(typeof self !== 'undefined' ? self : this, function () {
-  const FOCUS_SEATS = ['포룸 S7', '포룸 S8'];
+  const FOCUS_SEATS = ['포룸 S108', '포룸 S107']; // 실제 호실 번호 정정: 포룸 S7→S108, 포룸 S8→S107
+  const LEGACY_FOCUS_SEATS = ['포룸 S7', '포룸 S8']; // 정정 이전 기록과의 호환용 — 새 배정에는 쓰지 않고 카운트/판별에만 사용
   const EXTERNAL_SEATS = ['S45', 'S42', 'S27'];
   const ALL_SEATS = [...FOCUS_SEATS, ...EXTERNAL_SEATS];
+
+  function isFocusSeat(seat) {
+    return FOCUS_SEATS.includes(seat) || LEGACY_FOCUS_SEATS.includes(seat);
+  }
 
   // toISOString()은 항상 UTC 기준이라 KST(UTC+9) 등 UTC가 아닌 시간대에서는
   // 날짜가 하루 밀리거나(자정 부근) projectRange의 while문이 끝나지 않는 무한루프로 이어질 수 있어
@@ -44,7 +49,7 @@
     days.forEach((day) => {
       if (day.date >= beforeDate) return;
       Object.entries(day.assignments || {}).forEach(([p, s]) => {
-        if (s && FOCUS_SEATS.includes(s)) c[p] = (c[p] || 0) + 1;
+        if (s && isFocusSeat(s)) c[p] = (c[p] || 0) + 1;
       });
     });
     return c;
@@ -54,7 +59,7 @@
     for (let i = days.length - 1; i >= 0; i--) {
       const d = days[i];
       if (d.date >= beforeDate) continue;
-      if (FOCUS_SEATS.includes(d.assignments?.[person])) return d.date;
+      if (isFocusSeat(d.assignments?.[person])) return d.date;
     }
     return null;
   }
@@ -99,7 +104,7 @@
     const leaveFocus = [];
     present.forEach((p) => {
       const s = prevRec.assignments?.[p];
-      if (s && FOCUS_SEATS.includes(s)) {
+      if (s && isFocusSeat(s)) {
         ((prevRec.focusDay?.[p] || 1) < 2 ? stayFocus : leaveFocus).push(p);
       }
     });
@@ -111,11 +116,14 @@
       taken.add(s);
     });
 
-    const freeFocus = FOCUS_SEATS.filter((s) => !taken.has(s));
+    // 좌석 호실 정정 이전 기록은 이전 이름(LEGACY_FOCUS_SEATS)을 그대로 물려받아 taken에 들어있을 수 있어
+    // 이름 비교만으로는 "몇 자리가 비었는지"를 정확히 알 수 없다 — 실제로 남아있는 인원 수 기준으로 계산한다.
+    const freeFocusCount = FOCUS_SEATS.length - stayFocus.length;
+    const freeFocus = FOCUS_SEATS.filter((s) => !taken.has(s)).slice(0, freeFocusCount);
     const needAssign = present.filter((p) => !stayFocus.includes(p));
     const counts = focusCount(days, targetDate);
     // 우선순위: ① 포커스룸 누적 사용일 적은 순 → ② 마지막 사용일이 오래된 순 (null=한번도안씀=최우선) → ③ 등록 순서
-    const byUsage = [...needAssign].sort((a, b) => {
+    const byUsageSort = (a, b) => {
       const ca = counts[a] || 0;
       const cb = counts[b] || 0;
       if (ca !== cb) return ca - cb;
@@ -125,7 +133,17 @@
       if (!la) return -1;
       if (!lb) return 1;
       return la.localeCompare(lb);
-    });
+    };
+    // 어제 부재였다가 오늘 복귀한 사람은 자기 외부 자리가 비어있을 가능성이 높다 — 그 외부 빈자리를
+    // 먼저 채우는 게 우선이므로, 포커스룸 로테이션 후보에서는 제외한다(뒤쪽 stillNeed 단계에서
+    // 원래 자리를 되찾는다). 그래도 포커스룸 자리가 남으면(로테이션 대상자가 부족하면) 예외적으로 포함한다.
+    const isReturning = (p) => {
+      const s = prevRec.assignments?.[p];
+      return s === null || s === undefined;
+    };
+    const rotationEligible = needAssign.filter((p) => !isReturning(p)).sort(byUsageSort);
+    const returning = needAssign.filter((p) => isReturning(p)).sort(byUsageSort);
+    const byUsage = [...rotationEligible, ...returning];
     const gotFocus = [];
     freeFocus.forEach((seat, i) => {
       if (byUsage[i] !== undefined) {
@@ -215,8 +233,10 @@
 
   return {
     FOCUS_SEATS,
+    LEGACY_FOCUS_SEATS,
     EXTERNAL_SEATS,
     ALL_SEATS,
+    isFocusSeat,
     toDateStr,
     offsetDate,
     isWeekend,
