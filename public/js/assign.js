@@ -115,11 +115,15 @@
       taken.add(s);
     });
 
-    // 좌석 호실 정정 이전 기록은 이전 이름(LEGACY_FOCUS_SEATS)을 그대로 물려받아 taken에 들어있을 수 있어
-    // 이름 비교만으로는 "몇 자리가 비었는지"를 정확히 알 수 없다 — 실제로 남아있는 인원 수 기준으로 계산한다.
-    const freeFocusCount = FOCUS_SEATS.length - stayFocus.length;
-    const freeFocus = FOCUS_SEATS.filter((s) => !taken.has(s)).slice(0, freeFocusCount);
     const needAssign = present.filter((p) => !stayFocus.includes(p));
+    // 외부 좌석만으로 남은 인원을 다 앉힐 수 있으면, 포커스룸 로테이션은 그날 아예 쉰다 —
+    // 포커스룸은 외부 좌석이 부족할 때(인원 > 외부 좌석 수)의 "초과 인원"을 위한 자리이지,
+    // 매일 무조건 채워야 하는 자리가 아니다. 좌석 호실 정정 이전 기록은 이전 이름
+    // (LEGACY_FOCUS_SEATS)을 그대로 물려받아 taken에 들어있을 수 있어 이름 비교만으로는
+    // "몇 자리가 비었는지"를 정확히 알 수 없다 — 실제로 남아있는 인원 수 기준으로 계산한다.
+    const overflow = Math.max(0, needAssign.length - externalSeats.length);
+    const freeFocusCount = Math.min(FOCUS_SEATS.length - stayFocus.length, overflow);
+    const freeFocus = FOCUS_SEATS.filter((s) => !taken.has(s)).slice(0, freeFocusCount);
     const counts = focusCount(days, targetDate);
     // 우선순위: ① 포커스룸 누적 사용일 적은 순 → ② 마지막 사용일이 오래된 순 (null=한번도안씀=최우선) → ③ 등록 순서
     const byUsageSort = (a, b) => {
