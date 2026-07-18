@@ -85,15 +85,17 @@
     const prevRec = priorDays[0];
 
     if (!prevRec) {
-      FOCUS_SEATS.forEach((seat, i) => {
-        if (present[i] !== undefined) {
-          assignments[present[i]] = seat;
-          focusDay[present[i]] = 1;
-          taken.add(seat);
-        }
+      // 첫 배정일이라도 외부 우선 원칙은 동일하게 적용한다 — 외부 좌석만으로 다 앉힐 수 있으면
+      // 포커스룸은 초과 인원 수만큼만 채운다 (present.length 만큼 무조건 포커스룸부터 채우지 않는다).
+      const overflow = Math.max(0, present.length - externalSeats.length);
+      const focusCount = Math.min(FOCUS_SEATS.length, overflow);
+      FOCUS_SEATS.slice(0, focusCount).forEach((seat, i) => {
+        assignments[present[i]] = seat;
+        focusDay[present[i]] = 1;
+        taken.add(seat);
       });
       externalSeats.forEach((seat, i) => {
-        const p = present[i + FOCUS_SEATS.length];
+        const p = present[i + focusCount];
         if (p !== undefined) {
           assignments[p] = seat;
           taken.add(seat);
