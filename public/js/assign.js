@@ -36,6 +36,8 @@
   }
 
   // 기본 외부 좌석(외부1~3)에 그날그날 임시로 늘어난 자리(외부4, 외부5, ...)를 덧붙인다.
+  // 이 자리는 외부 좌석의 원래 사용자(우리 팀 5명이 아닌 다른 사람)가 부재해 생기는 여유분으로,
+  // 늘어난 만큼 아래 overflow 계산에 반영되어 포커스룸 신규 배정보다 먼저 채워진다 (외부 우선 원칙, 가이드 운영규칙 1).
   function buildExternalSeats(extraCount = 0) {
     if (!extraCount) return EXTERNAL_SEATS;
     const extra = Array.from({ length: extraCount }, (_, i) => `외부${EXTERNAL_SEATS.length + i + 1}`);
@@ -116,7 +118,7 @@
     });
 
     const needAssign = present.filter((p) => !stayFocus.includes(p));
-    // 외부 좌석만으로 남은 인원을 다 앉힐 수 있으면, 포커스룸 로테이션은 그날 아예 쉰다 —
+    // 외부 좌석(임시 증설분 포함)만으로 남은 인원을 다 앉힐 수 있으면, 포커스룸 로테이션은 그날 아예 쉰다 —
     // 포커스룸은 외부 좌석이 부족할 때(인원 > 외부 좌석 수)의 "초과 인원"을 위한 자리이지,
     // 매일 무조건 채워야 하는 자리가 아니다. 좌석 호실 정정 이전 기록은 이전 이름
     // (LEGACY_FOCUS_SEATS)을 그대로 물려받아 taken에 들어있을 수 있어 이름 비교만으로는
