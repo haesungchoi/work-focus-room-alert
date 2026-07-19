@@ -36,6 +36,13 @@
     return dow === 0 || dow === 6;
   }
 
+  // dateStr 다음으로 가장 가까운 근무일을 찾는다 (주말/휴무일은 건너뜀).
+  function nextWorkday(dateStr, isHolidayFor) {
+    let d = offsetDate(dateStr, 1);
+    while (isWeekend(d) || (isHolidayFor && isHolidayFor(d))) d = offsetDate(d, 1);
+    return d;
+  }
+
   // 기본 외부 좌석(외부1~3)에 그날그날 임시로 늘어난 자리(외부4, 외부5, ...)를 덧붙인다.
   // 이 자리는 외부 좌석의 원래 사용자(우리 팀 5명이 아닌 다른 사람)가 부재해 생기는 여유분으로,
   // 늘어난 만큼 아래 overflow 계산에 반영되어 포커스룸 신규 배정보다 먼저 채워진다 (외부 우선 원칙, 가이드 운영규칙 1).
@@ -71,7 +78,9 @@
   // targetDate: 'YYYY-MM-DD'
   // absent: 해당 날짜에 부재인 사람 이름 배열
   // extraExternalCount: 그날 임시로 늘어난 외부 좌석 개수 (기본 0)
-  function generate(people, days, targetDate, absent = [], extraExternalCount = 0) {
+  // nextAbsent: 다음 근무일에 부재 예정인 사람 이름 배열 (알고 있다면) — 포커스룸 좌석을 고를 때
+  // 참고용으로만 쓰인다 (아래 byChurnAwareUsage 참고)
+  function generate(people, days, targetDate, absent = [], extraExternalCount = 0, nextAbsent = []) {
     const externalSeats = buildExternalSeats(extraExternalCount);
     const present = people.filter((p) => !absent.includes(p));
     const assignments = {};
@@ -126,12 +135,22 @@
       if (!lb) return 1;
       return la.localeCompare(lb);
     };
+    // 다음 근무일에 부재 예정인 사람을 포커스룸 후보 중 최우선으로 둔다 — 그 사람은 내일 어차피
+    // 자리가 필요 없으니, 오늘 포커스룸에 넣어도 내일 "필요 인원이 줄어 누군가를 억지로 내보내야
+    // 하는" 상황 자체가 생기지 않는다. 반대로 내일도 출근하는 사람을 넣으면, 그 사람이 오늘 하루만
+    // 있다가 내일 다시 외부로 옮겨야 할 수 있다 — 불필요한 좌석 이동을 미리 피한다.
+    const byChurnAwareUsage = (a, b) => {
+      const aOut = nextAbsent.includes(a);
+      const bOut = nextAbsent.includes(b);
+      if (aOut !== bOut) return aOut ? -1 : 1;
+      return byUsageSort(a, b);
+    };
 
     // 외부 우선 원칙이 "2일 유지"보다 항상 우선한다 — 다른 사람의 결석 등으로 그날은 외부 좌석만으로
     // 충분해졌다면, 포커스룸 1일차였던 사람이라도 2일차를 못 채우고 그날은 외부로 내려간다.
     // 외부좌석을 비워둔 채로 포커스룸을 채우는 일이 없도록, 그날 실제로 필요한 만큼만 유지시킨다.
     const neededFocusSeats = Math.min(FOCUS_SEATS.length, Math.max(0, present.length - externalSeats.length));
-    const sortedEligible = [...focusEligible].sort(byUsageSort);
+    const sortedEligible = [...focusEligible].sort(byChurnAwareUsage);
     const stayFocus = sortedEligible.slice(0, neededFocusSeats);
     const bumpedFocus = sortedEligible.slice(neededFocusSeats); // 필요 인원이 줄어 2일차를 못 채우고 내려가는 사람
     const leaveFocus = [...focusMustLeave, ...bumpedFocus];
@@ -151,8 +170,8 @@
     // 이미 외부 자리에 안정적으로 앉아있던 사람은, 복귀/신규 인원만으로는 초과 인원을 다 못 채워
     // 포커스룸 자리가 그래도 남을 때만 부득이하게 이동시킨다.
     const isReturning = (p) => !prevRec.assignments?.[p];
-    const noSeatCandidates = needAssign.filter((p) => isReturning(p)).sort(byUsageSort);
-    const stableCandidates = needAssign.filter((p) => !isReturning(p)).sort(byUsageSort);
+    const noSeatCandidates = needAssign.filter((p) => isReturning(p)).sort(byChurnAwareUsage);
+    const stableCandidates = needAssign.filter((p) => !isReturning(p)).sort(byChurnAwareUsage);
     const byUsage = [...noSeatCandidates, ...stableCandidates];
     const gotFocus = [];
     freeFocus.forEach((seat, i) => {
@@ -231,7 +250,8 @@
       } else {
         const absent = absencePlanFor(cursor) || [];
         const extraExternalCount = (extraSeatsFor && extraSeatsFor(cursor)) || 0;
-        const { assignments, focusDay } = generate(people, timeline, cursor, absent, extraExternalCount);
+        const nextAbsent = absencePlanFor(nextWorkday(cursor, isHolidayFor)) || [];
+        const { assignments, focusDay } = generate(people, timeline, cursor, absent, extraExternalCount, nextAbsent);
         const rec = { date: cursor, absent, assignments, focusDay, offDay: false, extraExternalCount };
         timeline.push(rec); // 다음 근무일 예측이 이어서 참조할 수 있도록 누적
         projected.push({ ...rec, projected: true });
@@ -248,6 +268,7 @@
     toDateStr,
     offsetDate,
     isWeekend,
+    nextWorkday,
     buildExternalSeats,
     focusCount,
     lastFocusDate,

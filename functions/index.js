@@ -48,6 +48,13 @@ function workdayRange(startDate, endDate) {
   return dates;
 }
 
+// dateStr 다음으로 가장 가까운 근무일을 찾는다 (주말/회사 휴무일은 건너뜀).
+async function nextWorkdayDate(dateStr) {
+  let d = assign.offsetDate(dateStr, 1);
+  while (assign.isWeekend(d) || (await isHoliday(d))) d = assign.offsetDate(d, 1);
+  return d;
+}
+
 async function computeAndSaveDay(targetDate, absentOverride) {
   if (assign.isWeekend(targetDate) || (await isHoliday(targetDate))) {
     throw new HttpsError('failed-precondition', '주말/휴무일에는 자리 배정을 생성할 수 없습니다.');
@@ -56,7 +63,8 @@ async function computeAndSaveDay(targetDate, absentOverride) {
   const days = await getAllDays();
   const absent = absentOverride ?? (await getAbsencePlan(targetDate));
   const extraExternalCount = await getExtraSeats(targetDate);
-  const { assignments, focusDay } = assign.generate(people, days, targetDate, absent, extraExternalCount);
+  const nextAbsent = await getAbsencePlan(await nextWorkdayDate(targetDate));
+  const { assignments, focusDay } = assign.generate(people, days, targetDate, absent, extraExternalCount, nextAbsent);
   const record = {
     date: targetDate,
     absent,
