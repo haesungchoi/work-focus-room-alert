@@ -112,11 +112,16 @@ function seatType(s) {
 function findRecord(dateStr) { return state.days.find((d) => d.date === dateStr); }
 
 // dateStr에 대한 배정을 반환한다. 이미 확정 기록이 있으면 그걸, 없으면 현재 부재계획 기준 실시간 예상치.
+// dateStr만 단독으로 projectRange에 넘기면 그 이전의 미확정 미리보기 날짜들(예: 화요일을 볼 때 월요일 미리보기)이
+// 히스토리에서 통째로 빠져, 포커스룸 2일 유지 같은 하루-이어달리기 상태가 끊겨 결과가 날마다 따로 노는 문제가 있었다.
+// 그래서 마지막 확정 기록 다음날부터 dateStr까지 이어서 시뮬레이션한다 (달력 월간 미리보기와 동일한 방식).
 function assignmentFor(dateStr) {
   const rec = findRecord(dateStr);
   if (rec) return { ...rec, projected: false };
-  const projected = projectRange(state.people, state.days, dateStr, dateStr, absencePlanFor, isHolidayFor, extraSeatsFor);
-  return projected[0];
+  const lastConfirmed = state.days.map((d) => d.date).filter((d) => d < dateStr).pop();
+  const fromDate = lastConfirmed ? offsetDate(lastConfirmed, 1) : dateStr;
+  const projected = projectRange(state.people, state.days, fromDate, dateStr, absencePlanFor, isHolidayFor, extraSeatsFor);
+  return projected[projected.length - 1];
 }
 
 // ══ Cards ════════════════════════════════════════════════════════════════════
