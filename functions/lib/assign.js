@@ -104,31 +104,15 @@
       return { assignments, focusDay };
     }
 
-    const stayFocus = [];
-    const leaveFocus = [];
+    const focusEligible = []; // 어제 포커스룸 1일차 — 오늘 2일차로 유지될 수 있는 후보
+    const focusMustLeave = []; // 어제 포커스룸 2일차 — 오늘은 무조건 나가야 함
     present.forEach((p) => {
       const s = prevRec.assignments?.[p];
       if (s && isFocusSeat(s)) {
-        ((prevRec.focusDay?.[p] || 1) < 2 ? stayFocus : leaveFocus).push(p);
+        ((prevRec.focusDay?.[p] || 1) < 2 ? focusEligible : focusMustLeave).push(p);
       }
     });
 
-    stayFocus.forEach((p) => {
-      const s = prevRec.assignments[p];
-      assignments[p] = s;
-      focusDay[p] = 2;
-      taken.add(s);
-    });
-
-    const needAssign = present.filter((p) => !stayFocus.includes(p));
-    // 외부 좌석(임시 증설분 포함)만으로 남은 인원을 다 앉힐 수 있으면, 포커스룸 로테이션은 그날 아예 쉰다 —
-    // 포커스룸은 외부 좌석이 부족할 때(인원 > 외부 좌석 수)의 "초과 인원"을 위한 자리이지,
-    // 매일 무조건 채워야 하는 자리가 아니다. 좌석 호실 정정 이전 기록은 이전 이름
-    // (LEGACY_FOCUS_SEATS)을 그대로 물려받아 taken에 들어있을 수 있어 이름 비교만으로는
-    // "몇 자리가 비었는지"를 정확히 알 수 없다 — 실제로 남아있는 인원 수 기준으로 계산한다.
-    const overflow = Math.max(0, needAssign.length - externalSeats.length);
-    const freeFocusCount = Math.min(FOCUS_SEATS.length - stayFocus.length, overflow);
-    const freeFocus = FOCUS_SEATS.filter((s) => !taken.has(s)).slice(0, freeFocusCount);
     const counts = focusCount(days, targetDate);
     // 우선순위: ① 포커스룸 누적 사용일 적은 순 → ② 마지막 사용일이 오래된 순 (null=한번도안씀=최우선) → ③ 등록 순서
     const byUsageSort = (a, b) => {
@@ -142,6 +126,26 @@
       if (!lb) return 1;
       return la.localeCompare(lb);
     };
+
+    // 외부 우선 원칙이 "2일 유지"보다 항상 우선한다 — 다른 사람의 결석 등으로 그날은 외부 좌석만으로
+    // 충분해졌다면, 포커스룸 1일차였던 사람이라도 2일차를 못 채우고 그날은 외부로 내려간다.
+    // 외부좌석을 비워둔 채로 포커스룸을 채우는 일이 없도록, 그날 실제로 필요한 만큼만 유지시킨다.
+    const neededFocusSeats = Math.min(FOCUS_SEATS.length, Math.max(0, present.length - externalSeats.length));
+    const sortedEligible = [...focusEligible].sort(byUsageSort);
+    const stayFocus = sortedEligible.slice(0, neededFocusSeats);
+    const bumpedFocus = sortedEligible.slice(neededFocusSeats); // 필요 인원이 줄어 2일차를 못 채우고 내려가는 사람
+    const leaveFocus = [...focusMustLeave, ...bumpedFocus];
+
+    stayFocus.forEach((p) => {
+      const s = prevRec.assignments[p];
+      assignments[p] = s;
+      focusDay[p] = 2;
+      taken.add(s);
+    });
+
+    const needAssign = present.filter((p) => !stayFocus.includes(p));
+    const freeFocusCount = neededFocusSeats - stayFocus.length;
+    const freeFocus = FOCUS_SEATS.filter((s) => !taken.has(s)).slice(0, freeFocusCount);
     // 좌석 이동을 최소화하기 위해, 포커스룸에 새로 들어갈 사람은 "현재 지키고 있는 외부 자리가 없는 사람"
     // (어제 결석했다가 오늘 복귀한 사람, 명단에 새로 추가된 사람 등)부터 우선 채운다.
     // 이미 외부 자리에 안정적으로 앉아있던 사람은, 복귀/신규 인원만으로는 초과 인원을 다 못 채워
