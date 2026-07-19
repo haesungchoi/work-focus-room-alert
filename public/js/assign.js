@@ -141,11 +141,14 @@
       if (!lb) return 1;
       return la.localeCompare(lb);
     };
-    // 어제 부재였다가 오늘 복귀한 사람은 자기 외부 자리를 먼저 되찾아야 하므로(뒤쪽 stillNeed 단계),
-    // 포커스룸 로테이션 후보에서 완전히 제외한다. 로테이션 대상자가 부족해도 예외적으로 끼워넣지
-    // 않는다 — 그 경우 포커스룸 자리는 그날 비워두고, 외부 빈자리 채우기가 항상 우선한다.
+    // 좌석 이동을 최소화하기 위해, 포커스룸에 새로 들어갈 사람은 "현재 지키고 있는 외부 자리가 없는 사람"
+    // (어제 결석했다가 오늘 복귀한 사람, 명단에 새로 추가된 사람 등)부터 우선 채운다.
+    // 이미 외부 자리에 안정적으로 앉아있던 사람은, 복귀/신규 인원만으로는 초과 인원을 다 못 채워
+    // 포커스룸 자리가 그래도 남을 때만 부득이하게 이동시킨다.
     const isReturning = (p) => !prevRec.assignments?.[p];
-    const byUsage = needAssign.filter((p) => !isReturning(p)).sort(byUsageSort);
+    const noSeatCandidates = needAssign.filter((p) => isReturning(p)).sort(byUsageSort);
+    const stableCandidates = needAssign.filter((p) => !isReturning(p)).sort(byUsageSort);
+    const byUsage = [...noSeatCandidates, ...stableCandidates];
     const gotFocus = [];
     freeFocus.forEach((seat, i) => {
       if (byUsage[i] !== undefined) {
