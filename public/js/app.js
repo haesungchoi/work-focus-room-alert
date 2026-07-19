@@ -356,7 +356,7 @@ function renderCalendar() {
       <span style="width:8px;height:8px;border-radius:50%;background:${P_COLORS[i]};display:inline-block;flex-shrink:0"></span>${p}
     </span>`).join('');
 
-  const panelHtml = rangeSelection ? renderRangePanel() : (selectedDate ? renderDayPanel(selectedDate) : '');
+  const panelHtml = rangeSelection ? renderRangePanel() : (selectedDate ? renderDayPanel(selectedDate, byDate[selectedDate]) : '');
   const legendNote = calPerson === '__all__'
     ? '● 파란 점 = 포커스룸 배정 완료 &nbsp; 컬러 점 = 부재 계획 &nbsp; 날짜를 드래그하면 기간을 한 번에 등록할 수 있어요'
     : '파랑 = 포커스룸 · 회색 = 외부 좌석 · 옅은 회색 = 부재 (음영 없는 날은 아직 예측할 데이터가 없음)';
@@ -460,7 +460,10 @@ async function frAdjustExtraSeats(dateStr, delta) {
 }
 window.frAdjustExtraSeats = frAdjustExtraSeats;
 
-function renderDayPanel(dateStr) {
+// monthRec: renderCalendar()가 이미 달력 한 달 전체를 이어서 계산해둔 결과(byDate[dateStr]).
+// 여기서 다시 assignmentFor(dateStr)로 독립 계산하면 그 앞뒤 미확정 날짜들과 끊어진 결과가 나올 수 있어
+// (확정된 날짜가 하나도 없을 때 특히 심함), 항상 monthRec을 우선 사용하고 없을 때만 폴백한다.
+function renderDayPanel(dateStr, monthRec) {
   const weekend = isWeekend(dateStr);
   const holiday = isHolidayFor(dateStr);
   if (weekend || holiday) {
@@ -476,7 +479,7 @@ function renderDayPanel(dateStr) {
   const rec = findRecord(dateStr);
   const today = todayStr();
   const isFuture = dateStr >= today;
-  const preview = rec ? null : assignmentFor(dateStr);
+  const preview = rec ? null : (monthRec || assignmentFor(dateStr));
   const extraCount = extraSeatsFor(dateStr);
 
   const extraSeatsSection = `
