@@ -7,8 +7,8 @@
     root.FocusAssign = factory();
   }
 })(typeof self !== 'undefined' ? self : this, function () {
-  const FOCUS_SEATS = ['포룸 S108', '포룸 S107']; // 실제 호실 번호 정정: 포룸 S7→S108, 포룸 S8→S107
-  const LEGACY_FOCUS_SEATS = ['포룸 S7', '포룸 S8']; // 정정 이전 기록과의 호환용 — 새 배정에는 쓰지 않고 카운트/판별에만 사용
+  const FOCUS_SEATS = ['포룸 S98', '포룸 S97']; // 실제 호실 번호 정정: 포룸 S7→S108→S98, 포룸 S8→S107→S97
+  const LEGACY_FOCUS_SEATS = ['포룸 S7', '포룸 S8', '포룸 S108', '포룸 S107']; // 정정 이전 기록과의 호환용 — 새 배정에는 쓰지 않고 카운트/판별에만 사용
   const EXTERNAL_SEATS = ['S45', 'S42', 'S27'];
 
   function isFocusSeat(seat) {

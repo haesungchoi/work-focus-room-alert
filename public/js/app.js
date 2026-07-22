@@ -21,7 +21,7 @@ const callResetAllData = httpsCallable(functionsClient, 'resetAllData');
 const callSavePeople = httpsCallable(functionsClient, 'savePeople');
 
 // ══ Constants ════════════════════════════════════════════════════════════════
-const ICONS = { '포룸 S108': '🏠', '포룸 S107': '🏠', '포룸 S7': '🏠', '포룸 S8': '🏠', S45: '💼', S42: '💼', S27: '💼' };
+const ICONS = { '포룸 S98': '🏠', '포룸 S97': '🏠', '포룸 S108': '🏠', '포룸 S107': '🏠', '포룸 S7': '🏠', '포룸 S8': '🏠', S45: '💼', S42: '💼', S27: '💼' };
 const DAYS_KR = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS_KR = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 // 포커스룸(내부 좌석) 강조에 쓰는 액센트 블루(#3E6AE1)와 겹치지 않도록 고른 5명 구분용 색상
@@ -126,7 +126,7 @@ function assignmentFor(dateStr) {
 
 // ══ Cards ════════════════════════════════════════════════════════════════════
 function renderCards(assignments, focusDay, extraCount = 0) {
-  // 좌석 호실 정정(포룸 S7→S108, S8→S107) 이전 기록에는 옛 이름이 그대로 남아있을 수 있어,
+  // 좌석 호실 정정(포룸 S7→S108→S98, S8→S107→S97) 이전 기록에는 옛 이름이 그대로 남아있을 수 있어,
   // 현재 좌석 목록에 없더라도 실제 배정에 쓰인 좌석은 항상 카드로 표시되도록 합친다.
   const knownSeats = [...FOCUS_SEATS, ...buildExternalSeats(extraCount)];
   const usedSeats = Object.values(assignments || {}).filter(Boolean);
