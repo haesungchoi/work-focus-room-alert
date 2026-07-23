@@ -4,7 +4,7 @@ import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/
 
 // firebase-config.js (classic <script>, loaded before this module) provides window.FIREBASE_CONFIG
 // assign.js (classic <script>, loaded before this module) provides window.FocusAssign
-const { projectRange, offsetDate, toDateStr, isWeekend, buildExternalSeats, FOCUS_SEATS, isFocusSeat } = window.FocusAssign;
+const { projectRange, offsetDate, toDateStr, isWeekend, buildExternalSeats, FOCUS_SEATS, isFocusSeat, canonicalSeat } = window.FocusAssign;
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const db = getFirestore(app);
@@ -126,13 +126,15 @@ function assignmentFor(dateStr) {
 
 // ══ Cards ════════════════════════════════════════════════════════════════════
 function renderCards(assignments, focusDay, extraCount = 0) {
-  // 좌석 호실 정정(포룸 S7→S108→S98, S8→S107→S97) 이전 기록에는 옛 이름이 그대로 남아있을 수 있어,
-  // 현재 좌석 목록에 없더라도 실제 배정에 쓰인 좌석은 항상 카드로 표시되도록 합친다.
+  // 좌석 호실 정정(포룸 S7→S108→S98, S8→S107→S97) 이전에 확정된 기록에는 옛 이름이 그대로 남아있을 수 있어,
+  // 옛 이름은 canonicalSeat()로 새 이름과 합쳐서(카드가 따로 중복 표시되지 않게) 다룬다.
+  const canonicalAssignments = {};
+  Object.entries(assignments || {}).forEach(([p, s]) => { canonicalAssignments[p] = s ? canonicalSeat(s) : s; });
   const knownSeats = [...FOCUS_SEATS, ...buildExternalSeats(extraCount)];
-  const usedSeats = Object.values(assignments || {}).filter(Boolean);
+  const usedSeats = Object.values(canonicalAssignments).filter(Boolean);
   const seats = [...new Set([...knownSeats, ...usedSeats])];
   return seats.map((seat) => {
-    const person = Object.entries(assignments || {}).find(([, s]) => s === seat)?.[0];
+    const person = Object.entries(canonicalAssignments).find(([, s]) => s === seat)?.[0];
     const type = seatType(seat);
     const isFocus = isFocusSeat(seat);
     const dn = person && focusDay?.[person];
@@ -333,7 +335,7 @@ function renderCalendar() {
     if (offDay) {
       inner = `<div class="cal-num">${d}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">${holiday ? '💤' : '휴무'}</div>`;
     } else if (calPerson !== '__all__' && rec) {
-      const seat = rec.assignments?.[calPerson];
+      const seat = canonicalSeat(rec.assignments?.[calPerson]);
       const t = seatType(seat);
       personCls = t === 'focus' ? ' pfocus' : t === 'external' ? ' pext' : ' pabsent';
       const label = seat || '부재';
@@ -506,7 +508,7 @@ function renderDayPanel(dateStr, monthRec) {
   const record = rec || preview;
   if (record) {
     const rows = state.people.map((p) => {
-      const s = record.assignments?.[p];
+      const s = canonicalSeat(record.assignments?.[p]);
       const type = seatType(s);
       const fd = record.focusDay?.[p];
       return `<div class="day-assign-row">
@@ -775,7 +777,7 @@ function renderHistory() {
     <div class="history-card">
       <div class="history-date">${fmtDate(day.date)}</div>
       ${state.people.map((p) => {
-        const s = day.assignments?.[p];
+        const s = canonicalSeat(day.assignments?.[p]);
         const type = seatType(s);
         const fd = day.focusDay?.[p];
         return `<div class="history-row">

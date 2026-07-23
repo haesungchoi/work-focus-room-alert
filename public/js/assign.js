@@ -7,11 +7,24 @@
   }
 })(typeof self !== 'undefined' ? self : this, function () {
   const FOCUS_SEATS = ['포룸 S98', '포룸 S97']; // 실제 호실 번호 정정: 포룸 S7→S108→S98, 포룸 S8→S107→S97
-  const LEGACY_FOCUS_SEATS = ['포룸 S7', '포룸 S8', '포룸 S108', '포룸 S107']; // 정정 이전 기록과의 호환용 — 새 배정에는 쓰지 않고 카운트/판별에만 사용
+  // 정정 이전 기록과의 호환용 — 새 배정에는 쓰지 않고, 옛 이름이 남아있는 기록을 판별/표시할 때만 새 이름으로 매핑해 쓴다.
+  // (같은 자리끼리 나란히 매핑: 첫 번째 자리 S7→S108→S98, 두 번째 자리 S8→S107→S97)
+  const LEGACY_FOCUS_SEAT_MAP = {
+    '포룸 S7': '포룸 S98',
+    '포룸 S108': '포룸 S98',
+    '포룸 S8': '포룸 S97',
+    '포룸 S107': '포룸 S97',
+  };
   const EXTERNAL_SEATS = ['S45', 'S42', 'S27'];
 
   function isFocusSeat(seat) {
-    return FOCUS_SEATS.includes(seat) || LEGACY_FOCUS_SEATS.includes(seat);
+    return FOCUS_SEATS.includes(seat) || seat in LEGACY_FOCUS_SEAT_MAP;
+  }
+
+  // 옛 이름으로 저장된 기록도 항상 현재 호실 이름으로 통일해 돌려준다 — 화면에 옛 이름과 새 이름이
+  // 서로 다른 좌석 카드로 따로 표시되는 것을 막기 위함 (카운트/화면 표시 모두 이 함수를 거쳐 통일).
+  function canonicalSeat(seat) {
+    return LEGACY_FOCUS_SEAT_MAP[seat] || seat;
   }
 
   // toISOString()은 항상 UTC 기준이라 KST(UTC+9) 등 UTC가 아닌 시간대에서는
@@ -264,6 +277,7 @@
     FOCUS_SEATS,
     EXTERNAL_SEATS,
     isFocusSeat,
+    canonicalSeat,
     toDateStr,
     offsetDate,
     isWeekend,
