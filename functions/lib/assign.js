@@ -7,16 +7,19 @@
     root.FocusAssign = factory();
   }
 })(typeof self !== 'undefined' ? self : this, function () {
-  const FOCUS_SEATS = ['포룸 S98', '포룸 S97']; // 실제 호실 번호 정정: 포룸 S7→S108→S98, 포룸 S8→S107→S97
-  // 정정 이전 기록과의 호환용 — 새 배정에는 쓰지 않고, 옛 이름이 남아있는 기록을 판별/표시할 때만 새 이름으로 매핑해 쓴다.
-  // (같은 자리끼리 나란히 매핑: 첫 번째 자리 S7→S108→S98, 두 번째 자리 S8→S107→S97)
+  const FOCUS_SEATS = ['포룸 S97']; // 내부 좌석은 S97만 유지 (S98은 폐지)
+  // 정정/폐지 이전 기록과의 호환용 — 새 배정에는 쓰지 않고, 옛 이름이 남아있는 기록을 판별/표시할 때만 새 이름으로 매핑해 쓴다.
+  // (같은 자리끼리 나란히 매핑: 첫 번째 자리 S7→S108→S98, 두 번째 자리 S8→S107→S97.
+  // S98은 폐지되어 더 이상 배정되지 않지만, 과거 기록은 S97과 다른 별개의 자리이므로 자기 자신에 매핑해 구분 유지.)
   const LEGACY_FOCUS_SEAT_MAP = {
     '포룸 S7': '포룸 S98',
     '포룸 S108': '포룸 S98',
+    '포룸 S98': '포룸 S98',
     '포룸 S8': '포룸 S97',
     '포룸 S107': '포룸 S97',
   };
-  const EXTERNAL_SEATS = ['S45', 'S42', 'S27'];
+  const EXTERNAL_SEATS = ['S45', 'S42', 'S27', 'S23'];
+  const SEAT_BAN = { person: '지수', seat: 'S45' }; // 지수는 S45 좌석에 배정하지 않음
 
   function isFocusSeat(seat) {
     return FOCUS_SEATS.includes(seat) || seat in LEGACY_FOCUS_SEAT_MAP;
@@ -26,6 +29,24 @@
   // 서로 다른 좌석 카드로 따로 표시되는 것을 막기 위함 (카운트/화면 표시 모두 이 함수를 거쳐 통일).
   function canonicalSeat(seat) {
     return LEGACY_FOCUS_SEAT_MAP[seat] || seat;
+  }
+
+  // SEAT_BAN 위반이 생기면 같은 외부 좌석군에 있는 다른 사람과 자리를 맞바꾸고,
+  // 맞바꿀 사람이 없으면(그 사람 혼자만 외부좌석에 배정된 경우) 비어있는 다른 외부좌석으로 옮긴다.
+  function enforceSeatBan(assignments, externalSeats) {
+    const { person, seat: bannedSeat } = SEAT_BAN;
+    if (assignments[person] !== bannedSeat) return;
+    const swapPartner = Object.keys(assignments).find(
+      (p) => p !== person && externalSeats.includes(assignments[p])
+    );
+    if (swapPartner) {
+      assignments[person] = assignments[swapPartner];
+      assignments[swapPartner] = bannedSeat;
+      return;
+    }
+    const occupied = new Set(Object.values(assignments));
+    const alt = externalSeats.find((s) => s !== bannedSeat && !occupied.has(s));
+    if (alt) assignments[person] = alt;
   }
 
   // toISOString()은 항상 UTC 기준이라 KST(UTC+9) 등 UTC가 아닌 시간대에서는
@@ -123,6 +144,7 @@
           taken.add(seat);
         }
       });
+      enforceSeatBan(assignments, externalSeats);
       return { assignments, focusDay };
     }
 
@@ -241,6 +263,7 @@
       }
     });
 
+    enforceSeatBan(assignments, externalSeats);
     return { assignments, focusDay };
   }
 
